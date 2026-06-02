@@ -187,14 +187,14 @@ export default () => ({
 
 ## Step 6: The modular folder pattern
 
-The default scaffold gives you `server/src/{register,bootstrap,destroy}.ts` and a `controllers/services/routes` tree we don't need. We added a tight, purpose-built tree under `server/src/mcp/`:
+The default scaffold gives you `server/src/{register,bootstrap,destroy}.ts` and a `controllers/services/routes` tree we don't need. We added a small tree under `server/src/mcp/` with only what the plugin uses:
 
 ```
 server/src/
 ├── register.ts                ← 1-liner: calls registerMcpTools(strapi)
 └── mcp/
-    ├── index.ts               ← orchestrator: iterates tools, calls strapi.ai.mcp.registerTool
-    ├── types.ts               ← StrapiMcpToolModule contract
+    ├── index.ts               ← loads every tool and registers it with strapi.ai.mcp
+    ├── types.ts               ← the shared StrapiMcpToolModule type
     ├── guides/                ← long-form instruction content
     │   ├── article-authoring-guide.md   ← human-readable source of truth
     │   └── article-authoring-guide.ts   ← TS mirror exporting the markdown as a string
@@ -203,7 +203,7 @@ server/src/
         ├── get-stats-overview.ts          ← simple read tool
         ├── list-recent-articles.ts        ← read tool with input args
         ├── get-article-authoring-guide.ts ← returns guide markdown on demand
-        └── create-article-draft.ts        ← write tool with chaining directive
+        └── create-article-draft.ts        ← write tool; its description points at the guide
 ```
 
 **To add a tool: drop a file in `tools/`, add one line to `tools/index.ts`, run `npm run build`, restart.** That is all it takes.
@@ -358,7 +358,7 @@ Until that exists, the two-tool approach (a guide tool plus a save tool whose de
 
 One more reason to stay with tools: **`registerTool` is the only thing the [Plugin API](https://docs.strapi.io/cms/features/strapi-mcp-server#plugin-api) documents.** The code has types for registering prompts and resources, but those are not part of the documented, supported API. Building the workflow out of tools keeps the whole thing on the supported path.
 
-## A few gotchas worth flagging
+## Gotchas
 
 These cost us time and are not in the docs:
 
