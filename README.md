@@ -96,3 +96,4 @@ npm run deploy
 ---
 
 <sub>🤫 Psst! [Strapi is hiring](https://strapi.io/careers).</sub>
+# strapi-mcp-demo-and-tool-extension
