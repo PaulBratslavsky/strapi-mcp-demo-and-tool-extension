@@ -1,0 +1,69 @@
+{
+  "version": "0.0.0",
+  "keywords": [],
+  "type": "commonjs",
+  "exports": {
+    "./package.json": "./package.json",
+    "./strapi-admin": {
+      "types": "./dist/admin/src/index.d.ts",
+      "source": "./admin/src/index.ts",
+      "import": "./dist/admin/index.mjs",
+      "require": "./dist/admin/index.js",
+      "default": "./dist/admin/index.js"
+    },
+    "./strapi-server": {
+      "types": "./dist/server/src/index.d.ts",
+      "source": "./server/src/index.ts",
+      "import": "./dist/server/index.mjs",
+      "require": "./dist/server/index.js",
+      "default": "./dist/server/index.js"
+    }
+  },
+  "files": ["dist"],
+  "scripts": {
+    "build": "strapi-plugin build",
+    "watch": "strapi-plugin watch",
+    "watch:link": "strapi-plugin watch:link",
+    "verify": "strapi-plugin verify",
+    "test:ts:front": "tsc -p admin/tsconfig.json",
+    "test:ts:back": "tsc -p server/tsconfig.json"
+  },
+  "dependencies": {},
+  "devDependencies": {
+    "@strapi/strapi": "^5.47.0",
+    "@strapi/sdk-plugin": "^6.1.0",
+    "prettier": "^3.8.3",
+    "@strapi/design-system": "^2.2.0",
+    "@strapi/icons": "^2.2.0",
+    "react-intl": "^6.8.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.3",
+    "styled-components": "^6.4.2",
+    "@types/react": "^18.3.29",
+    "@types/react-dom": "^18.3.7",
+    "@strapi/typescript-utils": "^5.47.0",
+    "typescript": "^5.9.3"
+  },
+  "peerDependencies": {
+    "@strapi/strapi": "^5.47.0",
+    "@strapi/sdk-plugin": "^6.1.0",
+    "@strapi/design-system": "^2.2.0",
+    "@strapi/icons": "^2.2.0",
+    "react-intl": "^6.8.9",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "react-router-dom": "^6.30.3",
+    "styled-components": "^6.4.2"
+  },
+  "strapi": {
+    "kind": "plugin",
+    "name": "strapi-mcp",
+    "displayName": "MCP Plugin",
+    "description": "Plugin to use Strapi MCP with cutsom tools."
+  },
+  "name": "strapi-mcp",
+  "description": "Plugin to use Strapi MCP with cutsom tools.",
+  "license": "MIT",
+  "author": "Paul Bratslavsky <paul.bratslavsky@strapi.io>"
+}

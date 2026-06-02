@@ -16,16 +16,21 @@
     "upgrade:dry": "npx @strapi/upgrade latest --dry"
   },
   "dependencies": {
-    "@strapi/plugin-cloud": "5.46.1",
-    "@strapi/plugin-users-permissions": "5.46.1",
-    "@strapi/strapi": "5.46.1",
+    "@better-auth/infra": "^0.2.10",
+    "@strapi-community/plugin-api-permissions": "^1.0.0-alpha.3",
+    "@strapi-community/plugin-better-auth": "^1.0.0-beta.1",
+    "@strapi-community/plugin-better-auth-dashboard": "^1.0.0-alpha.1",
+    "@strapi/plugin-cloud": "5.47.0",
+    "@strapi/strapi": "5.47.0",
+    "better-auth": "^1.6.11",
     "better-sqlite3": "12.8.0",
     "fs-extra": "^10.0.0",
     "mime-types": "^2.1.27",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-router-dom": "^6.0.0",
-    "styled-components": "^6.0.0"
+    "styled-components": "^6.0.0",
+    "zod": "^4.4.3"
   },
   "devDependencies": {
     "@types/node": "^20",

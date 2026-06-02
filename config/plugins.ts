@@ -1,5 +1,17 @@
-import type { Core } from '@strapi/strapi';
+export default () => ({
+  'better-auth': {
+    enabled: true,
+  },
+  'better-auth-dashboard': {
+    enabled: true,
+  },
+  'api-permissions': {
+    enabled: true,
+  },
 
-const config = ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Plugin => ({});
+  'strapi-mcp': {
+    enabled: true,
+    resolve: './src/plugins/strapi-mcp'
+  },
 
-export default config;
+});

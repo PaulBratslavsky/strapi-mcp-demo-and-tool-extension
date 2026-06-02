@@ -1,60 +1,97 @@
-# 🚀 Getting started with Strapi
+# strapi-with-content
 
-Strapi comes with a full featured [Command Line Interface](https://docs.strapi.io/dev-docs/cli) (CLI) which lets you scaffold and manage your project in seconds.
+A [Strapi 5](https://strapi.io) backend preloaded with blog content types and seed data, plus three things that go beyond a stock Strapi install:
 
-### `develop`
+- **A custom MCP server plugin** (`strapi-mcp`) that exposes the content API as [Model Context Protocol](https://modelcontextprotocol.io) tools, so an AI assistant can list, draft, and publish articles.
+- **Better Auth** wired in via the Strapi-community plugins, replacing the default users-permissions auth.
+- **A custom `/api/stats` endpoint** that returns an overview of the content in the instance.
 
-Start your Strapi application with autoReload enabled. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-develop)
+## Content model
 
-```
+| Type | Kind | Purpose |
+| --- | --- | --- |
+| Article | collection | Blog posts (rich-text `blocks`, cover, author, category) |
+| Author | collection | Post authors, with avatar |
+| Category | collection | Post categories |
+| About | single | About page content |
+| Global | single | Site-wide settings |
+
+Shared components live in `src/components/shared`.
+
+## Requirements
+
+- Node.js `>=20.0.0 <=24.x.x`
+- npm `>=6.0.0`
+
+The project uses SQLite (`better-sqlite3`) out of the box — no external database needed to get started.
+
+## Getting started
+
+```bash
+npm install
 npm run develop
-# or
-yarn develop
 ```
 
-### `start`
+`develop` starts Strapi with autoReload enabled. On first run, create your admin user at [http://localhost:1337/admin](http://localhost:1337/admin).
 
-Start your Strapi application with autoReload disabled. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-start)
+### Seed example content
 
-```
-npm run start
-# or
-yarn start
+```bash
+npm run seed:example
 ```
 
-### `build`
+Runs `scripts/seed.js` to populate articles, authors, and categories (with placeholder images).
 
-Build your admin panel. [Learn more](https://docs.strapi.io/dev-docs/cli#strapi-build)
+## Scripts
 
+| Command | Description |
+| --- | --- |
+| `npm run develop` | Start Strapi with autoReload ([docs](https://docs.strapi.io/dev-docs/cli#strapi-develop)) |
+| `npm run start` | Start Strapi with autoReload disabled ([docs](https://docs.strapi.io/dev-docs/cli#strapi-start)) |
+| `npm run build` | Build the admin panel ([docs](https://docs.strapi.io/dev-docs/cli#strapi-build)) |
+| `npm run seed:example` | Seed example content |
+| `npm run console` | Open the Strapi console |
+| `npm run upgrade` | Upgrade to the latest Strapi version |
+| `npm run deploy` | Deploy to [Strapi Cloud](https://cloud.strapi.io) |
+
+## The `strapi-mcp` plugin
+
+A local plugin at `src/plugins/strapi-mcp` that surfaces the content API as MCP tools — listing, creating drafts, publishing, and managing articles, authors, and categories — so an AI client (such as Claude) can author content directly against this instance. Articles created through the plugin follow a fixed blog template (TL;DR, body, citations) enforced by its authoring guide.
+
+## Authentication
+
+Auth is handled by [Better Auth](https://www.better-auth.com/) through the Strapi-community plugins:
+
+- `@strapi-community/plugin-better-auth`
+- `@strapi-community/plugin-api-permissions`
+- `@strapi-community/plugin-better-auth-dashboard`
+
+Configuration lives in `src/lib/auth.ts` and `src/extensions/better-auth`. Note this replaces Strapi's default users-permissions plugin.
+
+## Custom stats endpoint
+
+`GET /api/stats` returns an overview of the content in the instance. See `src/api/stats`.
+
+## Deployment
+
+Strapi offers several deployment options, including [Strapi Cloud](https://cloud.strapi.io). See the [deployment docs](https://docs.strapi.io/dev-docs/deployment) for the best fit, or:
+
+```bash
+npm run deploy
 ```
-npm run build
-# or
-yarn build
-```
 
-## ⚙️ Deployment
+## Learn more
 
-Strapi gives you many possible deployment options for your project including [Strapi Cloud](https://cloud.strapi.io). Browse the [deployment section of the documentation](https://docs.strapi.io/dev-docs/deployment) to find the best solution for your use case.
+- [Strapi documentation](https://docs.strapi.io)
+- [Strapi tutorials](https://strapi.io/tutorials)
+- [Strapi blog](https://strapi.io/blog)
+- [Strapi GitHub repository](https://github.com/strapi/strapi)
 
-```
-yarn strapi deploy
-```
+## Community
 
-## 📚 Learn more
-
-- [Resource center](https://strapi.io/resource-center) - Strapi resource center.
-- [Strapi documentation](https://docs.strapi.io) - Official Strapi documentation.
-- [Strapi tutorials](https://strapi.io/tutorials) - List of tutorials made by the core team and the community.
-- [Strapi blog](https://strapi.io/blog) - Official Strapi blog containing articles made by the Strapi team and the community.
-- [Changelog](https://strapi.io/changelog) - Find out about the Strapi product updates, new features and general improvements.
-
-Feel free to check out the [Strapi GitHub repository](https://github.com/strapi/strapi). Your feedback and contributions are welcome!
-
-## ✨ Community
-
-- [Discord](https://discord.strapi.io) - Come chat with the Strapi community including the core team.
-- [Forum](https://forum.strapi.io/) - Place to discuss, ask questions and find answers, show your Strapi project and get feedback or just talk with other Community members.
-- [Awesome Strapi](https://github.com/strapi/awesome-strapi) - A curated list of awesome things related to Strapi.
+- [Discord](https://discord.strapi.io)
+- [Forum](https://forum.strapi.io/)
+- [Awesome Strapi](https://github.com/strapi/awesome-strapi)
 
 ---
 
