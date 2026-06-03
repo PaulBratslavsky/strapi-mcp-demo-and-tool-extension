@@ -231,8 +231,6 @@ The cost: after every source change you run `npm run build` inside the plugin fo
 
 ## Step 5: Scaffold the plugin
 
-A note on the name. We call the plugin `strapi-extended-mcp`, not `strapi-mcp`. `strapi-mcp` is the name clients usually give the MCP *server* connection (the `claude mcp add strapi-mcp` line earlier), so reusing it for the plugin invites confusion between the server you connect to and the plugin that adds tools to it. `strapi-extended-mcp` says what the plugin does: it extends the built-in MCP server.
-
 ```bash
 mkdir -p src/plugins/strapi-extended-mcp
 cd src/plugins/strapi-extended-mcp
