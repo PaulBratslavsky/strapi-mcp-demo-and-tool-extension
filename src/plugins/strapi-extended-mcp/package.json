@@ -58,11 +58,11 @@
   },
   "strapi": {
     "kind": "plugin",
-    "name": "strapi-mcp",
+    "name": "strapi-extended-mcp",
     "displayName": "MCP Plugin",
     "description": "Plugin to use Strapi MCP with cutsom tools."
   },
-  "name": "strapi-mcp",
+  "name": "strapi-extended-mcp",
   "description": "Plugin to use Strapi MCP with cutsom tools.",
   "license": "MIT",
   "author": "Paul Bratslavsky <paul.bratslavsky@strapi.io>"
