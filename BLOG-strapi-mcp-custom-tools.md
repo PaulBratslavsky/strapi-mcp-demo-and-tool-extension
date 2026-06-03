@@ -5,7 +5,7 @@
 - Strapi 5.47+ ships an MCP server **built in**. You enable it with one line in `config/server.ts`, point an MCP client (Claude Code, Cursor, Windsurf) at `/mcp`, and you immediately get CRUD tools for every content type — gated by the admin token's permissions.
 - The out-of-the-box CRUD tools cover content types. **They do not cover custom controllers, custom workflows, or anything that isn't a plain entity.** That's where custom tools come in.
 - You can call `strapi.ai.mcp.registerTool(...)` from anywhere in the `register()` phase, but wrapping that in a **plugin** makes the work shareable, versionable, and gives a clean folder structure once you have more than one tool.
-- The best-practice pattern for chained, LLM-driven workflows (e.g. "write a draft following our format → save it") is **two cooperating tools**: a `get_*_guide` tool that returns instructions on demand, plus an action tool whose description begins with a "REQUIRED: call the guide tool first" directive. The LLM auto-discovers and auto-chains both.
+- The best-practice pattern for chained, LLM-driven workflows (e.g. "write a draft following our format → save it") is **two cooperating tools**: a `get_*_guide` tool that returns instructions on demand, plus an action tool whose description begins with a "REQUIRED: call the guide tool first" directive. The LLM auto-discovers and auto-chains both. << We don't provide this workflow for CM at the moment. Room for improvement we can discuss.
 - The reference implementation — including the plugin, the full folder layout, and a long-term proposal for upstream Strapi — lives in [this example project](#about-the-example-project).
 
 ## What is MCP, and why does it matter?
@@ -62,18 +62,20 @@ Restart Strapi. The MCP endpoint is now live at `http://localhost:1337/mcp`.
 
 ### Heads-up #1: the right token
 
-The MCP server uses **Admin API Tokens**, not Content API Tokens. They look identical in the UI but live under different menus:
+The MCP server uses **Admin API Tokens**, not Content API Tokens. They look identical in the UI but live under different menus: << Actually the UI is different between controller based method permission for Content API token and admin permissions (RBAC) for the admin one
 
 - ❌ **Settings → API Tokens**: these are for the Content API (`/api/...`). MCP rejects them with a 401.
 - ✅ **Settings → Admin Tokens**: this is the one MCP accepts.
 
-Create one with **Full Access** for local dev. You can give it narrower permissions later. The token value is shown only once, so copy it as soon as it appears.
+Create one with **Full Access** for local dev. You can give it narrower permissions later. The token value is shown only once, so copy it as soon as it appears. << Full access is a Content API token concept—you can enable in one click. For Admin Tokens it's quite important to think the other way around: the goal is to give the least privileges because you want your workflow to only touch the expected parts and because each CT level permission enabled would enable a new MCP tool (6 per content type). If you have 10 CT, it's already 60 tools and their fully fledge defintions that bloat your LLM context from the start.
 
 ### Heads-up #2: tool exposure mirrors token permissions
 
-The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A full-access token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows. The token sets the ceiling. The docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries).
+The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A full-access token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows. The token sets the ceiling. The docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries). << About the ceiling: The permission ceiling of an Admin Token is at most the ceiling of the union of the roles of its owner
 
 ### Connect from Claude Code
+
+<< What about presenting the MCP settings: url, `transport: streamable-http`, auth agnosticly from tools. Maybe useful for anyone configuring any other tool than Claude Code?
 
 Following the [Connecting Claude Code](https://docs.strapi.io/cms/features/strapi-mcp-server#connecting-claude-code) doc:
 
@@ -112,8 +114,8 @@ None of the built-in tools know this controller exists. To expose it, you regist
 
 The function to call is `strapi.ai.mcp.registerTool({...})`, documented in the [Plugin API](https://docs.strapi.io/cms/features/strapi-mcp-server#plugin-api) section. Two rules from those docs matter before you start:
 
-- **Call it inside `register()`, not `bootstrap()`.** Strapi locks the tool list once the MCP server starts, and `register()` runs before that point. Register later and the tool will not show up.
-- **Required fields are `name`, `title`, `description`, `resolveOutputSchema`, and either `auth` or `devModeOnly`.** `resolveInputSchema` is optional; leave it out for a tool that takes no arguments. The schema fields are functions, not plain objects. Strapi calls them on each request and passes the caller's permissions (`context.userAbility`), so a tool can return a narrower schema for a less-privileged token. The `z` you build the schema with has to come from `@strapi/utils`, not the `zod` package directly.
+- **Call it inside `register()`, not `bootstrap()`.** Strapi locks the tool list once the MCP server starts, and `register()` runs before that point. Register later and the tool will not show up. << I'd love this part to be true but along the content type management implementation we had to open the registration for both `register` and `bootstrap` lifecycle hooks. TL;DR: Registering at `register` phase is the cleanest. Registering at `bootstrap` guarantee strapi services are properly accessible (including document service, db...), which are required in most of the meaningful use cases. We merged a [PR#26517](https://github.com/strapi/strapi/pull/26517) in that direction.
+- **Required fields are `name`, `title`, `description`, `resolveOutputSchema`, and either `auth` or `devModeOnly`.** `resolveInputSchema` is optional; leave it out for a tool that takes no arguments. The schema fields are functions, not plain objects. Strapi calls them on each request and passes the caller's permissions (`context.userAbility`), so a tool can return a narrower schema for a less-privileged token. The `z` [[ standing for [Zod](https://github.com/colinhacks/zod) ]] you build the schema with has to come from `@strapi/utils`, not the `zod` package directly.
 
 Here is the smallest working tool, registered straight in `src/index.ts`:
 
@@ -133,7 +135,7 @@ export default {
         categories: z.number().int().nonnegative(),
       }),
       auth: {
-        policies: [
+        policies: [ << FYI This array is currently testing with a OR condition when many items
           { action: 'plugin::content-manager.explorer.read', subject: 'api::article.article' },
         ],
       },
@@ -146,11 +148,13 @@ export default {
       },
     });
   },
-  bootstrap() {},
+  bootstrap() {}, << Might be interesting to move to bootstrap to avoid the pitfalls of the register phase 🤔
 };
 ```
 
 Restart Strapi. The model now sees a `get_stats_overview` tool, calls it when it needs those counts, and gets back the typed object your schema describes.
+
+<< I think somewhere here we should introduce the flow where you register your own admin permission so your tool can use it specifically without getting in the way of the content management tools. This API is not related to MCP but extends the same set of perms.
 
 So why bother with a plugin?
 
@@ -173,7 +177,7 @@ cd src/plugins/strapi-mcp
 npx @strapi/sdk-plugin@latest init .
 ```
 
-Answer the prompts (plugin name `strapi-mcp`, no admin panel UI needed for this case). Then wire it up in your main Strapi `config/plugins.ts`:
+Answer the prompts (plugin name `strapi-mcp`, no admin panel UI needed for this case). Then wire it up in your main Strapi `config/plugins.ts`: << Cosmetics: I found the name `strapi-mcp` a bit too generic (also probably because this is the name of the MCP server fromt the client). Yet, what about `strapi-extended-mcp`?
 
 ```ts
 // config/plugins.ts
@@ -192,7 +196,7 @@ The default scaffold gives you `server/src/{register,bootstrap,destroy}.ts` and 
 ```
 server/src/
 ├── register.ts                ← 1-liner: calls registerMcpTools(strapi)
-└── mcp/
+└── mcp/ << 👌
     ├── index.ts               ← loads every tool and registers it with strapi.ai.mcp
     ├── types.ts               ← the shared StrapiMcpToolModule type
     ├── guides/                ← long-form instruction content
@@ -233,6 +237,8 @@ export type StrapiMcpToolModule = {
   register: (registerTool: RegisterTool, strapi: Core.Strapi) => void;
 };
 ```
+<< I like the type hack here! another way to access the it is over `Modules.MCP.McpService['registerTool']` but I like your proposal.
+<< The actual improvement we can add is by exporting the identity functions, ex. with [makeMcpToolDefinition](https://github.com/strapi/strapi/blob/develop/packages/core/core/src/services/mcp/tool-registry.ts) used by [log tool](https://github.com/strapi/strapi/blob/develop/packages/core/core/src/services/mcp/tools/log.ts). I wanted to start having a plugin usage/playground before exporting them.
 
 Each tool file then looks like:
 
@@ -255,14 +261,14 @@ The file that loads them imports the list and calls each one's `register`:
 ```ts
 // server/src/mcp/index.ts
 import type { Core } from '@strapi/strapi';
-import { tools } from './tools';
+import { tools } from './tools'; << Where this is coming from?
 
 export const registerMcpTools = (strapi: Core.Strapi) => {
-  if (!strapi.ai?.mcp?.isEnabled()) {
+  if (!strapi.ai?.mcp?.isEnabled()) { << this should not need the `?`
     strapi.log.warn('[strapi-mcp plugin] MCP not enabled — skipping.');
     return;
   }
-  const registerTool = strapi.ai.mcp.registerTool.bind(strapi.ai.mcp);
+  const registerTool = strapi.ai.mcp.registerTool.bind(strapi.ai.mcp); << This looks quite weird, why do you need to bind here?
   for (const tool of tools) tool.register(registerTool, strapi);
   strapi.log.info(`[strapi-mcp plugin] Registered ${tools.length} custom MCP tool(s).`);
 };
@@ -310,7 +316,7 @@ const tool: StrapiMcpToolModule = {
 };
 ```
 
-The second tool saves the draft. Its description **starts** by telling the model to call the guide tool first:
+The second tool saves the draft. Its description **starts** by telling the model to call the guide tool first: << I'm afraid this tool would conflict with the create/update article generated from CT. Maybe just use the built in at this stage?
 
 ```ts
 // server/src/mcp/tools/create-article-draft.ts (excerpt)
