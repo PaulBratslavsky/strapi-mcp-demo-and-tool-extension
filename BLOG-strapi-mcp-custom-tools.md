@@ -2,11 +2,11 @@
 
 **TL;DR**
 
-- Strapi 5.47+ ships an MCP server **built in**. You enable it with one line in `config/server.ts`, point an MCP client (Claude Code, Cursor, Windsurf) at `/mcp`, and you immediately get CRUD tools for every content type — gated by the admin token's permissions.
+- Strapi 5.47+ ships an MCP server **built in**. You enable it with one line in `config/server.ts`, point an MCP client (Claude Code, Cursor, Windsurf) at `/mcp`, and you immediately get CRUD tools for every content type, gated by the admin token's permissions.
 - The out-of-the-box CRUD tools cover content types. **They do not cover custom controllers, custom workflows, or anything that isn't a plain entity.** That's where custom tools come in.
 - You can call `strapi.ai.mcp.registerTool(...)` from anywhere in the `register()` phase, but wrapping that in a **plugin** makes the work shareable, versionable, and gives a clean folder structure once you have more than one tool.
-- The best-practice pattern for chained, LLM-driven workflows (e.g. "write a draft following our format → save it") is **two cooperating tools**: a `get_*_guide` tool that returns instructions on demand, plus an action tool whose description begins with a "REQUIRED: call the guide tool first" directive. The LLM auto-discovers and auto-chains both.
-- The reference implementation — including the plugin, the full folder layout, and a long-term proposal for upstream Strapi — lives in [this example project](#about-the-example-project).
+- For a multi-step workflow (e.g. "write a draft in our format, then save it"), add a custom `get_*_guide` tool that returns the format rules on demand, and let the model save with the **built-in** content-type tools. A custom save tool would overlap with those built-in tools, so the guide is the only custom piece worth adding. The catch: you no longer own the save tool's description, so the model needs a nudge (a prompt, or server instructions once Strapi exposes them) to read the guide first.
+- The reference implementation lives in [this example project](#about-the-example-project): the plugin, the full folder layout, and a long-term proposal for upstream Strapi.
 
 ## What is MCP, and why does it matter?
 
@@ -62,20 +62,26 @@ Restart Strapi. The MCP endpoint is now live at `http://localhost:1337/mcp`.
 
 ### Heads-up #1: the right token
 
-The MCP server uses **Admin API Tokens**, not Content API Tokens. They look identical in the UI but live under different menus:
+The MCP server uses **Admin API Tokens**, not Content API Tokens. These are two different permission systems, not the same screen in two places. A Content API token grants per-controller-action access (check `find`, `create`, and so on for each content type). An Admin token uses Strapi's role-based access control (RBAC): it inherits what its owner's admin roles allow. They live under different menus:
 
 - ❌ **Settings → API Tokens**: these are for the Content API (`/api/...`). MCP rejects them with a 401.
 - ✅ **Settings → Admin Tokens**: this is the one MCP accepts.
 
-Create one with **Full Access** for local dev. You can give it narrower permissions later. The token value is shown only once, so copy it as soon as it appears.
+Give the Admin token the **least** access it needs, and add permissions as you go. This is the opposite of the usual "Full Access for local dev" habit, and the reason is specific to MCP: every content-type permission you enable turns into a set of MCP tools (up to about six per content type: `list`, `get`, `create`, `update`, `delete`, `publish`). Enable everything across, say, ten content types and the client sees roughly sixty tools, each with a full schema. All of that lands in the model's context before it does any work. A narrow token keeps the tool list short and the context focused on what the workflow actually touches. ("Full Access" in one click is really a Content API token idea; for Admin tokens, scope deliberately.) The token value is shown only once, so copy it as soon as it appears.
 
 ### Heads-up #2: tool exposure mirrors token permissions
 
-The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A full-access token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows. The token sets the ceiling. The docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries).
+The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A broader token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows. The token sets the ceiling, and the ceiling itself is bounded: an Admin token can never exceed the combined permissions of its owner's roles. The docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries).
 
 ### Connect from Claude Code
 
-Following the [Connecting Claude Code](https://docs.strapi.io/cms/features/strapi-mcp-server#connecting-claude-code) doc:
+Any MCP client needs the same three settings, whatever its config format:
+
+- **URL**: `http://localhost:1337/mcp`
+- **Transport**: `streamable-http`
+- **Auth**: an `Authorization: Bearer <admin token>` header
+
+The rest is client-specific. For Claude Code, following the [Connecting Claude Code](https://docs.strapi.io/cms/features/strapi-mcp-server#connecting-claude-code) doc:
 
 ```bash
 claude mcp add strapi-mcp --transport http http://localhost:1337/mcp \
@@ -112,8 +118,8 @@ None of the built-in tools know this controller exists. To expose it, you regist
 
 The function to call is `strapi.ai.mcp.registerTool({...})`, documented in the [Plugin API](https://docs.strapi.io/cms/features/strapi-mcp-server#plugin-api) section. Two rules from those docs matter before you start:
 
-- **Call it inside `register()`, not `bootstrap()`.** Strapi locks the tool list once the MCP server starts, and `register()` runs before that point. Register later and the tool will not show up.
-- **Required fields are `name`, `title`, `description`, `resolveOutputSchema`, and either `auth` or `devModeOnly`.** `resolveInputSchema` is optional; leave it out for a tool that takes no arguments. The schema fields are functions, not plain objects. Strapi calls them on each request and passes the caller's permissions (`context.userAbility`), so a tool can return a narrower schema for a less-privileged token. The `z` you build the schema with has to come from `@strapi/utils`, not the `zod` package directly.
+- **Register before the MCP server starts.** Strapi locks the tool list at startup, and the start happens at a specific point in the boot order: plugin `register()` → plugin `bootstrap()` → MCP server starts → app `bootstrap()` (your `src/index.ts`). So from inside a plugin you can register in either `register()` or `bootstrap()`. From the app's own `src/index.ts`, only `register()` is early enough; registering in `src/index.ts` `bootstrap()` runs after the server has started and throws. `register()` is the cleanest place. `bootstrap()` runs later, after Strapi's services (the document service, the database) are fully ready, so register there if your tool's setup needs them at registration time. (The tool's `createHandler` always runs at request time, so handlers have full service access either way.) Strapi opened registration to `bootstrap` in [PR #26517](https://github.com/strapi/strapi/pull/26517).
+- **Required fields are `name`, `title`, `description`, `resolveOutputSchema`, and either `auth` or `devModeOnly`.** `resolveInputSchema` is optional; leave it out for a tool that takes no arguments. The schema fields are functions, not plain objects. Strapi calls them on each request and passes the caller's permissions (`context.userAbility`), so a tool can return a narrower schema for a less-privileged token. The `z` you build the schema with (Strapi's bundled copy of [Zod](https://github.com/colinhacks/zod)) has to come from `@strapi/utils`, not the `zod` package directly.
 
 Here is the smallest working tool, registered straight in `src/index.ts`:
 
@@ -152,13 +158,71 @@ export default {
 
 Restart Strapi. The model now sees a `get_stats_overview` tool, calls it when it needs those counts, and gets back the typed object your schema describes.
 
+### A note on that `auth` block
+
+The example above gates `get_stats_overview` on a content-manager permission, `plugin::content-manager.explorer.read`. That works as a first pass, but it ties the tool to content-manager access: the tool appears only for a token that can read those types in the Content Manager, and it shares the permission the built-in content-type tools already use. You can't turn the tool on or off on its own.
+
+For tools that are their own thing, register your own admin permissions and gate on those. Give each tool its own permission so an admin can switch tools on one at a time. The API is the one core plugins use, `actionProvider.registerMany`, called during `register()`:
+
+```ts
+// server/src/mcp/permissions.ts
+const PLUGIN_NAME = 'strapi-extended-mcp';
+
+// One action per tool. UIDs come out as plugin::strapi-extended-mcp.<uid>.
+const ACTION_DEFS = [
+  { uid: 'stats.read',    displayName: 'Read content stats overview' },
+  { uid: 'articles.read', displayName: 'List recent articles' },
+  { uid: 'api-docs.read', displayName: 'Read Content API documentation' },
+  { uid: 'guide.read',    displayName: 'Read the article authoring guide' },
+  { uid: 'info.read',     displayName: 'Read extended MCP plugin info' },
+];
+
+export const MCP_ACTIONS = {
+  STATS_READ:    `plugin::${PLUGIN_NAME}.stats.read`,
+  ARTICLES_READ: `plugin::${PLUGIN_NAME}.articles.read`,
+  API_DOCS_READ: `plugin::${PLUGIN_NAME}.api-docs.read`,
+  GUIDE_READ:    `plugin::${PLUGIN_NAME}.guide.read`,
+  INFO_READ:     `plugin::${PLUGIN_NAME}.info.read`,
+};
+
+export const registerMcpPermissions = async (strapi) => {
+  await strapi.service('admin::permission').actionProvider.registerMany(
+    ACTION_DEFS.map((a) => ({ section: 'plugins', pluginName: PLUGIN_NAME, ...a }))
+  );
+};
+```
+
+Each tool then gates on its own action:
+
+```ts
+// get-stats-overview.ts
+auth: { policies: [{ action: MCP_ACTIONS.STATS_READ }] },  // plugin::strapi-extended-mcp.stats.read
+```
+
+This is not an MCP API. It is Strapi's normal role-based access control. The MCP gate just runs `ability.can(action)` against the token's permissions for whatever action you named.
+
+**Granting the permissions (this happens in the admin, not in code).** Registering an action does not grant it. Each registered action shows up as a checkbox in the admin: open **Settings → Admin Tokens**, edit (or create) a token, go to the **Plugins** tab, and under **Strapi extended mcp** you'll see one checkbox per tool:
+
+```
+Plugins ▸ Strapi extended mcp
+  [✓] Read content stats overview      → get_stats_overview
+  [✓] List recent articles             → list_recent_articles
+  [✓] Read Content API documentation   → get_content_api_docs
+  [ ] Read the article authoring guide → get_article_authoring_guide
+  [ ] Read extended MCP plugin info    → get_extended_mcp_info
+```
+
+Check the tools you want this token to expose and **Save**. The same checkboxes appear on a **role** (Settings → Roles), if you'd rather grant by role than per token.
+
+The gating works both ways. A tool you granted is visible in `tools/list`, and you can call it. A tool you did not grant is not in the list, and calling it by name is rejected with `Tool <name> disabled` rather than silently ignored. So with the three boxes above checked, `get_stats_overview`, `list_recent_articles`, and `get_content_api_docs` work. The other two stay gated until you check them too. The example repo's `npm run test:mcp` checks exactly this for whatever you've granted: granted tools are callable, gated tools reject the call.
+
 So why bother with a plugin?
 
 ## Step 4: Why we wrapped this in a plugin
 
 Registering tools directly in `src/index.ts` works. Plenty of small projects do exactly that. We chose a plugin instead, and the reasons add up once you have more than one or two tools:
 
-- **It keeps the code in one place.** Everything MCP-related sits under `src/plugins/strapi-mcp/`. None of it mixes into the app's own `src/index.ts` or `src/lib/`. Someone opening the project later sees the folder name and knows what is inside.
+- **It keeps the code in one place.** Everything MCP-related sits under `src/plugins/strapi-extended-mcp/`. None of it mixes into the app's own `src/index.ts` or `src/lib/`. Someone opening the project later sees the folder name and knows what is inside.
 - **It is portable.** A Strapi plugin is a folder with a `package.json`. You can `npm publish` it, or copy it into another Strapi project, and every tool comes with it, already wired up. The other project does not have to touch its own `src/index.ts`.
 - **It has room to grow.** Five tools, a couple of guide files, some shared helpers: the plugin's `server/src/` folder holds all of it, and the app root stays clean.
 - **It has the right lifecycle hooks.** A plugin gets its own `register`, `bootstrap`, and `destroy` functions. Tool registration belongs in `register()`, and the plugin gives you that function directly.
@@ -167,20 +231,22 @@ The cost: after every source change you run `npm run build` inside the plugin fo
 
 ## Step 5: Scaffold the plugin
 
+A note on the name. We call the plugin `strapi-extended-mcp`, not `strapi-mcp`. `strapi-mcp` is the name clients usually give the MCP *server* connection (the `claude mcp add strapi-mcp` line earlier), so reusing it for the plugin invites confusion between the server you connect to and the plugin that adds tools to it. `strapi-extended-mcp` says what the plugin does: it extends the built-in MCP server.
+
 ```bash
-mkdir -p src/plugins/strapi-mcp
-cd src/plugins/strapi-mcp
+mkdir -p src/plugins/strapi-extended-mcp
+cd src/plugins/strapi-extended-mcp
 npx @strapi/sdk-plugin@latest init .
 ```
 
-Answer the prompts (plugin name `strapi-mcp`, no admin panel UI needed for this case). Then wire it up in your main Strapi `config/plugins.ts`:
+Answer the prompts (plugin name `strapi-extended-mcp`, no admin panel UI needed for this case). Then wire it up in your main Strapi `config/plugins.ts`:
 
 ```ts
 // config/plugins.ts
 export default () => ({
-  'strapi-mcp': {
+  'strapi-extended-mcp': {
     enabled: true,
-    resolve: './src/plugins/strapi-mcp',
+    resolve: './src/plugins/strapi-extended-mcp',
   },
 });
 ```
@@ -195,6 +261,7 @@ server/src/
 └── mcp/
     ├── index.ts               ← loads every tool and registers it with strapi.ai.mcp
     ├── types.ts               ← the shared StrapiMcpToolModule type
+    ├── permissions.ts         ← registers the plugin's own admin permission
     ├── guides/                ← long-form instruction content
     │   ├── article-authoring-guide.md   ← human-readable source of truth
     │   └── article-authoring-guide.ts   ← TS mirror exporting the markdown as a string
@@ -202,8 +269,9 @@ server/src/
         ├── index.ts                       ← export const tools = [...]
         ├── get-stats-overview.ts          ← simple read tool
         ├── list-recent-articles.ts        ← read tool with input args
+        ├── get-content-api-docs.ts        ← lists api:: types, endpoints, fields
         ├── get-article-authoring-guide.ts ← returns guide markdown on demand
-        └── create-article-draft.ts        ← write tool; its description points at the guide
+        └── get-extended-mcp-info.ts       ← gated on the plugin's own permission
 ```
 
 **To add a tool: drop a file in `tools/`, add one line to `tools/index.ts`, run `npm run build`, restart.** That is all it takes.
@@ -234,6 +302,8 @@ export type StrapiMcpToolModule = {
 };
 ```
 
+You can also reach the same type through `Modules.MCP.McpService['registerTool']`. And Strapi core has an identity helper, [`makeMcpToolDefinition`](https://github.com/strapi/strapi/blob/develop/packages/core/core/src/services/mcp/tool-registry.ts) (used internally by the built-in `log` tool), that may be exported for plugin authors later. Until it is, the local type above does the job.
+
 Each tool file then looks like:
 
 ```ts
@@ -250,7 +320,7 @@ const tool: StrapiMcpToolModule = {
 export default tool;
 ```
 
-The file that loads them imports the list and calls each one's `register`:
+The file that loads them imports the list (`./tools` resolves to the `tools/index.ts` barrel above) and calls each one's `register`:
 
 ```ts
 // server/src/mcp/index.ts
@@ -258,13 +328,15 @@ import type { Core } from '@strapi/strapi';
 import { tools } from './tools';
 
 export const registerMcpTools = (strapi: Core.Strapi) => {
-  if (!strapi.ai?.mcp?.isEnabled()) {
-    strapi.log.warn('[strapi-mcp plugin] MCP not enabled — skipping.');
+  if (!strapi.ai.mcp.isEnabled()) {
+    strapi.log.warn('[strapi-extended-mcp plugin] MCP not enabled — skipping.');
     return;
   }
-  const registerTool = strapi.ai.mcp.registerTool.bind(strapi.ai.mcp);
+  // registerTool is a closure on the service, not a this-method,
+  // so it can be passed around directly — no bind needed.
+  const { registerTool } = strapi.ai.mcp;
   for (const tool of tools) tool.register(registerTool, strapi);
-  strapi.log.info(`[strapi-mcp plugin] Registered ${tools.length} custom MCP tool(s).`);
+  strapi.log.info(`[strapi-extended-mcp plugin] Registered ${tools.length} custom MCP tool(s).`);
 };
 ```
 
@@ -286,7 +358,7 @@ The goal: the user says *"write a blog post about Next.js server actions and sav
 
 The first attempt was an MCP **prompt** called `write_technical_blog_post` that returned the format rules. It did not work, and the reason is the "auto-loaded" column from the table at the top. A prompt only runs when the user picks it. In Claude Code and other clients, prompts show up as slash commands the user clicks. The model will not fetch a prompt on its own just because the task seems to call for it. So the format rules sat in a prompt the model never opened.
 
-The fix was **two tools that work together**:
+The custom part is just the guide. Saving uses the built-in `create_article` tool, the one Strapi already generates from the Article content type:
 
 ```ts
 // server/src/mcp/tools/get-article-authoring-guide.ts
@@ -297,10 +369,10 @@ const tool: StrapiMcpToolModule = {
       title: 'Get the article authoring guide',
       description:
         "Return the required output format and section rules for writing articles in this Strapi instance. " +
-        "Call this BEFORE drafting article content, then follow the returned format exactly when constructing " +
-        "`create_article_draft`'s `content_markdown`.",
+        "Call this BEFORE drafting article content, then follow the returned format when saving the article " +
+        "with the built-in `create_article` tool (put the formatted markdown in a shared.rich-text block under `blocks`).",
       resolveOutputSchema: () => z.object({ guide_markdown: z.string() }),
-      auth: { policies: [{ action: 'plugin::content-manager.explorer.read', subject: 'api::article.article' }] },
+      auth: { policies: [{ action: MCP_ACTIONS.GUIDE_READ }] },  // plugin::strapi-extended-mcp.guide.read
       createHandler: () => async () => ({
         content: [{ type: 'text', text: ARTICLE_AUTHORING_GUIDE_MD }],
         structuredContent: { guide_markdown: ARTICLE_AUTHORING_GUIDE_MD },
@@ -310,42 +382,24 @@ const tool: StrapiMcpToolModule = {
 };
 ```
 
-The second tool saves the draft. Its description **starts** by telling the model to call the guide tool first:
+An earlier draft of this plugin shipped a custom `create_article_draft` tool that wrapped the write and carried the "call the guide first" instruction in its own description. We dropped it, for two reasons. It overlapped with the built-in `create_article` and `update_article` tools, so a model facing both has to guess which one to use. And to write articles it had to borrow the same `plugin::content-manager.explorer.create` permission the built-in tool already uses, so the two were doing the same job through the same permission. The built-in tool already writes articles with the right permissions. The only piece worth adding is the format guide.
 
-```ts
-// server/src/mcp/tools/create-article-draft.ts (excerpt)
-description:
-  "REQUIRED: call `get_article_authoring_guide` FIRST to learn the required output format " +
-  "before writing `content_markdown`. Then save a new article as a draft (not published). " +
-  "The markdown content is wrapped in a single shared.rich-text block. " +
-  "Optionally link an author or category by their slug or display name.",
-```
-
-Now when the user says *"write a post about X and save it as a draft,"* the model does this on its own:
-
-1. Lists the tools and sees `create_article_draft`.
-2. Reads its description and sees the `REQUIRED` line.
-3. Calls `get_article_authoring_guide` first.
-4. Gets the format rules back and writes the draft to match them.
-5. Calls `create_article_draft` to save it.
-
-The user does not have to click anything or paste the format rules. The model finds the order by reading the tool descriptions, because both tools are the kind it loads and calls on its own.
+This choice costs us something. With a custom save tool, we owned its description, so we could put `REQUIRED: call get_article_authoring_guide first` right where the model would read it. The model would then chain the two on its own. The built-in `create_article` tool's description is not ours to edit, so that automatic trigger is gone. The guide tool still exists, but the model only reads it if something tells it to: the user asking for it, or (once Strapi supports it) server instructions. That gap is what the next section is about.
 
 ```mermaid
 sequenceDiagram
     participant U as User
     participant L as LLM (Claude Code)
     participant S as Strapi MCP
-    U->>L: "Write a post about RSC and save it"
+    U->>L: "Write a post about RSC using the authoring guide, then save it"
     L->>S: tools/list
-    S-->>L: 4 tools (incl. create_article_draft)
-    Note over L: Reads create_article_draft description<br/>sees "REQUIRED: call get_article_authoring_guide first"
+    S-->>L: custom get_article_authoring_guide + built-in create_article
     L->>S: tools/call get_article_authoring_guide
     S-->>L: guide markdown (TL;DR, sections, citations format)
-    Note over L: Drafts post following the guide
-    L->>S: tools/call create_article_draft({title, description, content_markdown, …})
-    S-->>L: { documentId, status: 'draft', … }
-    L-->>U: "Saved as draft. ID: …"
+    Note over L: Drafts the post following the guide
+    L->>S: tools/call create_article (built-in)
+    S-->>L: { documentId, … }
+    L-->>U: "Saved. ID: …"
 ```
 
 ### Why not MCP server instructions?
@@ -365,14 +419,15 @@ These cost us time and are not in the docs:
 - **The plugin loads from `dist/`, not `server/src/`.** After every source change, run `npm run build` in the plugin folder and restart Strapi. If you edit the source and skip the build, nothing changes and it looks like your edit did nothing.
 - **MCP needs an Admin Token, not a Content API Token.** They are created on different settings pages and look the same. Only the Admin Token works.
 - **Build schemas with `z` from `@strapi/utils`, not from the `zod` package.** Strapi pulls in zod 3 as a dependency. If your project also has zod 4, importing `zod` directly can load the wrong version and crash. The `z` from `@strapi/utils` is the one Strapi is using, so use that.
-- **CASL policy strings matter.** Use the exact action constants Strapi's content-manager uses:
+- **Multiple policies are OR, not AND.** When `auth.policies` has more than one entry, the token passes if it satisfies any one of them. So if you list a content-manager read policy and a plugin policy on the same tool, a token with either one can call it.
+- **Permission action strings must be exact.** When you gate on a content-manager permission, use the exact action strings Strapi's content-manager uses:
   - `plugin::content-manager.explorer.read`
   - `plugin::content-manager.explorer.create`
   - `plugin::content-manager.explorer.update`
   - `plugin::content-manager.explorer.delete`
   - `plugin::content-manager.explorer.publish`
-- **Dynamic zones are awkward.** Strapi's MCP server documents this under [Known limitations](https://docs.strapi.io/cms/features/strapi-mcp-server#known-limitations) (dynamic zones are passed as untyped arrays; you also can't upload new media via MCP). We sidestepped it by always wrapping the LLM's markdown in a single `shared.rich-text` block on save. Human editors can rearrange in the admin UI after.
-- **Strapi does not fill in `uid` fields on a draft create.** A `slug` field stays empty. Pass the slug yourself, or build it from the title in your handler.
+- **Dynamic zones are awkward.** Strapi's MCP server documents this under [Known limitations](https://docs.strapi.io/cms/features/strapi-mcp-server#known-limitations) (dynamic zones are passed as untyped arrays; you also can't upload new media via MCP). For the article-writing flow, the guide tells the model to put all the prose in a single `shared.rich-text` block, which avoids the dynamic-zone sharp edges. A human editor can split it into other blocks in the admin afterward.
+- **Strapi does not fill in `uid` fields automatically when a tool creates an entry.** A `slug` field stays empty unless the caller sends one. If you want a slug, have the model pass it, or set a default in a content-type lifecycle hook.
 
 ## When to skip the plugin
 
@@ -388,8 +443,10 @@ Pulling a plugin out before you need it costs the same as any other early abstra
 
 Every line of code in this post comes from a working example you can clone and run. The repo includes:
 
-- The full plugin scaffold at `src/plugins/strapi-mcp/`
-- Working tools: `get_stats_overview`, `list_recent_articles`, `get_article_authoring_guide`, `create_article_draft`
+- The full plugin scaffold at `src/plugins/strapi-extended-mcp/`
+- Working tools: `get_stats_overview`, `list_recent_articles`, `get_content_api_docs`, `get_article_authoring_guide`, and `get_extended_mcp_info` (the dedicated-permission demo)
+- Five per-tool admin permissions (`plugin::strapi-extended-mcp.*`) registered via `actionProvider.registerMany`, each gating one tool, grantable per-tool from the Admin Tokens UI
+- A small end-to-end test script (`scripts/test-mcp.mjs`, runnable with `npm run test:mcp`)
 - Better Auth replacing `users-permissions` (separate write-up)
 - `PR-DRAFT-mcp-server-instructions.md`, the proposal for adding server-instructions support to Strapi's MCP
 

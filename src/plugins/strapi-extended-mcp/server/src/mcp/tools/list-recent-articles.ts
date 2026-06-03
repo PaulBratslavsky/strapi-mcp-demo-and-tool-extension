@@ -1,5 +1,6 @@
 import { z } from "@strapi/utils";
 import type { StrapiMcpToolModule } from "../types";
+import { MCP_ACTIONS } from "../permissions";
 
 const tool: StrapiMcpToolModule = {
   register(registerTool) {
@@ -28,12 +29,7 @@ const tool: StrapiMcpToolModule = {
           ),
         }),
       auth: {
-        policies: [
-          {
-            action: "plugin::content-manager.explorer.read",
-            subject: "api::article.article",
-          },
-        ],
+        policies: [{ action: MCP_ACTIONS.ARTICLES_READ }],
       },
       createHandler: (strapi) => async ({ args }) => {
         const limit = args?.limit ?? 5;

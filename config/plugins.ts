@@ -9,9 +9,9 @@ export default () => ({
     enabled: true,
   },
 
-  'strapi-mcp': {
+  'strapi-extended-mcp': {
     enabled: true,
-    resolve: './src/plugins/strapi-mcp'
+    resolve: './src/plugins/strapi-extended-mcp'
   },
 
 });

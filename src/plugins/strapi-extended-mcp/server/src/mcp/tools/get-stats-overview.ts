@@ -1,5 +1,6 @@
 import { z } from "@strapi/utils";
 import type { StrapiMcpToolModule } from "../types";
+import { MCP_ACTIONS } from "../permissions";
 
 const tool: StrapiMcpToolModule = {
   register(registerTool) {
@@ -15,20 +16,7 @@ const tool: StrapiMcpToolModule = {
           categories: z.number().int().nonnegative(),
         }),
       auth: {
-        policies: [
-          {
-            action: "plugin::content-manager.explorer.read",
-            subject: "api::article.article",
-          },
-          {
-            action: "plugin::content-manager.explorer.read",
-            subject: "api::author.author",
-          },
-          {
-            action: "plugin::content-manager.explorer.read",
-            subject: "api::category.category",
-          },
-        ],
+        policies: [{ action: MCP_ACTIONS.STATS_READ }],
       },
       createHandler: (strapi) => async () => {
         const overview = await strapi
