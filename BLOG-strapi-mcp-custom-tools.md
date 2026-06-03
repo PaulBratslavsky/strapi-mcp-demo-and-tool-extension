@@ -6,7 +6,7 @@
 - The out-of-the-box CRUD tools cover content types. **They do not cover custom controllers, custom workflows, or anything that isn't a plain entity.** That's where custom tools come in.
 - You can call `strapi.ai.mcp.registerTool(...)` from anywhere in the `register()` phase, but wrapping that in a **plugin** makes the work shareable, versionable, and gives a clean folder structure once you have more than one tool.
 - For a multi-step workflow (e.g. "write a draft in our format, then save it"), add a custom `get_*_guide` tool that returns the format rules on demand, and let the model save with the **built-in** content-type tools. A custom save tool would overlap with those built-in tools, so the guide is the only custom piece worth adding. The catch: you no longer own the save tool's description, so the model needs a nudge (a prompt, or server instructions once Strapi exposes them) to read the guide first.
-- The reference implementation lives in [this example project](#about-the-example-project): the plugin, the full folder layout, and a long-term proposal for upstream Strapi.
+- The reference implementation lives in [this example project](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension): the plugin, the full folder layout, and a long-term proposal for upstream Strapi.
 
 ## What is MCP, and why does it matter?
 
@@ -389,22 +389,22 @@ sequenceDiagram
     participant U as User
     participant L as LLM (Claude Code)
     participant S as Strapi MCP
-    U->>L: "Write a post about RSC using the authoring guide, then save it"
+    U->>L: Write a post using the authoring guide, then save it
     L->>S: tools/list
-    S-->>L: custom get_article_authoring_guide + built-in create_article
+    S-->>L: custom get_article_authoring_guide plus built-in create_article
     L->>S: tools/call get_article_authoring_guide
-    S-->>L: guide markdown (TL;DR, sections, citations format)
+    S-->>L: guide markdown with the format rules
     Note over L: Drafts the post following the guide
-    L->>S: tools/call create_article (built-in)
-    S-->>L: { documentId, … }
-    L-->>U: "Saved. ID: …"
+    L->>S: tools/call create_article built-in
+    S-->>L: returns the new documentId
+    L-->>U: Saved as an article
 ```
 
 ### Why not MCP server instructions?
 
 There is a better fit for this in the protocol: [MCP server instructions](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/). The server sends a block of text when a client connects, and the client adds it to the model's system prompt. This is the part built for "the model should always read X before using this server." It loads on connect, without the user doing anything.
 
-Strapi 5.47 does not let a plugin set it. The MCP SDK underneath supports an `instructions` field, but Strapi builds the server (in `McpServerFactory.ts`, with `new McpServer(...)`) without passing one, and there is no plugin method to supply it. We wrote [a draft proposal in the repo](#about-the-example-project) (`PR-DRAFT-mcp-server-instructions.md`) to add a `setInstructions()` method to `strapi.ai.mcp`.
+Strapi 5.47 does not let a plugin set it. The MCP SDK underneath supports an `instructions` field, but Strapi builds the server (in `McpServerFactory.ts`, with `new McpServer(...)`) without passing one, and there is no plugin method to supply it. We wrote [a draft proposal in the repo](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension/blob/main/PR-DRAFT-mcp-server-instructions.md) (`PR-DRAFT-mcp-server-instructions.md`) to add a `setInstructions()` method to `strapi.ai.mcp`.
 
 Until that exists, the two-tool approach (a guide tool plus a save tool whose description points at it) is the way to make a model follow a multi-step workflow. It is also what larger MCP servers such as Linear, Sentry, and GitHub do today.
 
@@ -439,7 +439,13 @@ Pulling a plugin out before you need it costs the same as any other early abstra
 
 ## About the example project
 
-Every line of code in this post comes from a working example you can clone and run. The repo includes:
+Every line of code in this post comes from a working example you can clone and run: [`PaulBratslavsky/strapi-mcp-demo-and-tool-extension`](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension).
+
+```bash
+git clone https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension.git
+```
+
+The repo includes:
 
 - The full plugin scaffold at `src/plugins/strapi-extended-mcp/`
 - Working tools: `get_stats_overview`, `list_recent_articles`, `get_content_api_docs`, `get_article_authoring_guide`, and `get_extended_mcp_info` (the dedicated-permission demo)
