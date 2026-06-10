@@ -27,21 +27,6 @@ The "auto-loaded" column is the one to watch. It decides whether the model uses 
 
 That table is the MCP protocol in general. Out of the box, Strapi fills only one of those rows: it auto-derives **tools** from your content types. It registers no prompts or resources by default, and it sends no server instructions. So on a fresh Strapi, tools are the whole surface.
 
-```mermaid
-flowchart LR
-    subgraph "MCP Client (Claude Code / Cursor / …)"
-        LLM[LLM]
-    end
-    subgraph "Strapi (5.47+)"
-        MCP["/mcp endpoint<br/>(built-in)"]
-        CT[("Auto-derived CRUD tools<br/>list / get / create / update / delete<br/>publish / unpublish / discard_draft")]
-        CUSTOM[/"strapi.ai.mcp.registerTool(…)<br/>(your custom tools)"/]
-    end
-    LLM -->|"Bearer admin token"| MCP
-    MCP --> CT
-    MCP --> CUSTOM
-```
-
 ## Step 1: Turn on the built-in MCP server
 
 The MCP server is a [Beta feature that requires Strapi 5.47.0 or later](https://docs.strapi.io/cms/features/strapi-mcp-server). On that version it takes one line of config. Following the [code-based configuration docs](https://docs.strapi.io/cms/features/strapi-mcp-server#strapi-code-based-configuration), open `config/server.ts` and add `mcp.enabled: true`:
@@ -71,9 +56,11 @@ The MCP server uses **Admin API Tokens**, not Content API Tokens. These are two 
 
 Give the Admin token the **least** access it needs, and add permissions as you go. This is the opposite of the usual "Full Access for local dev" habit, and the reason is specific to MCP: every content-type permission you enable turns into a set of MCP tools (up to about six per content type: `list`, `get`, `create`, `update`, `delete`, `publish`). Enable everything across, say, ten content types and the client sees roughly sixty tools, each with a full schema. All of that lands in the model's context before it does any work. A narrow token keeps the tool list short and the context focused on what the workflow actually touches. ("Full Access" in one click is really a Content API token idea; for Admin tokens, scope deliberately.) The token value is shown only once, so copy it as soon as it appears.
 
-### Heads-up #2: tool exposure mirrors token permissions
+### Heads-up #2: the token decides which tools appear
 
-This is about the built-in content-type tools (custom tools come later). The client only sees the ones the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A broader token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows; the token sets the ceiling, and the docs cover that under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries). That ceiling is itself bounded: an Admin token's permissions can't exceed the combined permissions of its owner's roles.
+The built-in tools you can use depend on the token's permissions (custom tools come later). A read-only token shows only the `list_*` and `get_*` tools. 
+
+A token with write access also shows create, update, delete, and publish. You can't see more tools than the token allows; the docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries).
 
 ### Connect from Claude Code
 
