@@ -73,7 +73,7 @@ Give the Admin token the **least** access it needs, and add permissions as you g
 
 ### Heads-up #2: tool exposure mirrors token permissions
 
-The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A broader token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows; the token sets the ceiling, and the docs cover that under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries). That ceiling is itself bounded: an Admin token's permissions can't exceed the combined permissions of its owner's roles.
+This is about the built-in content-type tools (custom tools come later). The client only sees the ones the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A broader token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows; the token sets the ceiling, and the docs cover that under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries). That ceiling is itself bounded: an Admin token's permissions can't exceed the combined permissions of its owner's roles.
 
 ### Connect from Claude Code
 
@@ -90,7 +90,25 @@ claude mcp add strapi-mcp --transport http http://localhost:1337/mcp \
   -H "Authorization: Bearer YOUR_ADMIN_TOKEN"
 ```
 
-Start a new Claude Code session and run `/mcp`. It should show `strapi-mcp ✓ Connected`. Now you can ask things like *"list the 3 most recent articles"* and the built-in tools answer. Cursor, Windsurf, and Claude Desktop each have their own setup steps in the [AI client configuration](https://docs.strapi.io/cms/features/strapi-mcp-server#ai-client-configuration) docs.
+Start a new Claude Code session and run `/mcp`. It should show `strapi-mcp ✓ Connected`. Now you can ask things like *"list the 3 most recent articles"* and the built-in tools answer.
+
+**Claude Desktop** doesn't speak `streamable-http` directly, so it connects through the `mcp-remote` bridge. Add this to `claude_desktop_config.json` (macOS: `~/Library/Application Support/Claude/`, Windows: `%APPDATA%\Claude\`) and restart Desktop:
+
+```json
+{
+  "mcpServers": {
+    "strapi-mcp": {
+      "command": "npx",
+      "args": [
+        "-y", "mcp-remote", "http://localhost:1337/mcp",
+        "--header", "Authorization: Bearer YOUR_ADMIN_TOKEN"
+      ]
+    }
+  }
+}
+```
+
+Cursor and Windsurf have their own config formats; the [AI client configuration](https://docs.strapi.io/cms/features/strapi-mcp-server#ai-client-configuration) docs cover all four.
 
 ## Step 2: When the built-in tools aren't enough
 
