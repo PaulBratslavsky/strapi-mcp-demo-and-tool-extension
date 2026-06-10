@@ -5,7 +5,7 @@
 - Strapi 5.47+ ships an MCP server **built in**. You enable it with one line in `config/server.ts`, point an MCP client (Claude Code, Cursor, Windsurf) at `/mcp`, and you immediately get CRUD tools for every content type, gated by the admin token's permissions.
 - The out-of-the-box CRUD tools cover content types. **They do not cover custom controllers, custom workflows, or anything that isn't a plain entity.** That's where custom tools come in.
 - You can call `strapi.ai.mcp.registerTool(...)` from anywhere in the `register()` phase, but wrapping that in a **plugin** makes the work shareable, versionable, and gives a clean folder structure once you have more than one tool.
-- For a multi-step workflow (e.g. "write a draft in our format, then save it"), add a custom `get_*_guide` tool that returns the format rules on demand, and let the model save with the **built-in** content-type tools. A custom save tool would overlap with those built-in tools, so the guide is the only custom piece worth adding. The catch: you no longer own the save tool's description, so the model needs a nudge (a prompt, or server instructions once Strapi exposes them) to read the guide first.
+- For a multi-step workflow, add a custom `get_*_guide` tool for your format rules and let the model save with the **built-in** content-type tools.
 - The reference implementation lives in [this example project](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension): the plugin, the full folder layout, and a long-term proposal for upstream Strapi.
 
 ## What is MCP, and why does it matter?
@@ -73,7 +73,7 @@ Give the Admin token the **least** access it needs, and add permissions as you g
 
 ### Heads-up #2: tool exposure mirrors token permissions
 
-The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A broader token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows. The token sets the ceiling, and the ceiling itself is bounded: an Admin token can never exceed the combined permissions of its owner's roles. The docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries).
+The MCP client only sees tools the token is allowed to use. A read-only token exposes the `list_*` and `get_*` tools and nothing else. A broader token also exposes create, update, delete, and publish tools. There is no separate setting that grants MCP more than the token allows; the token sets the ceiling, and the docs cover that under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries). That ceiling is itself bounded: an Admin token's permissions can't exceed the combined permissions of its owner's roles.
 
 ### Connect from Claude Code
 
@@ -120,9 +120,9 @@ None of the built-in tools know this controller exists. To expose it, you regist
 
 ## Step 3: Register a custom tool
 
-The function to call is `strapi.ai.mcp.registerTool({...})`, documented in the [Plugin API](https://docs.strapi.io/cms/features/strapi-mcp-server#plugin-api) section. Two rules from those docs matter before you start:
+The function to call is `strapi.ai.mcp.registerTool({...})`; the [Plugin API](https://docs.strapi.io/cms/features/strapi-mcp-server#plugin-api) section is the entry point. Two rules matter before you start:
 
-- **Register before the MCP server starts.** Strapi locks the tool list at startup, and the start happens at a specific point in the boot order: plugin `register()` → plugin `bootstrap()` → MCP server starts → app `bootstrap()` (your `src/index.ts`). So from inside a plugin you can register in either `register()` or `bootstrap()`. From the app's own `src/index.ts`, only `register()` is early enough; registering in `src/index.ts` `bootstrap()` runs after the server has started and throws. `register()` is the cleanest place. `bootstrap()` runs later, after Strapi's services (the document service, the database) are fully ready, so register there if your tool's setup needs them at registration time. (The tool's `createHandler` always runs at request time, so handlers have full service access either way.) Strapi opened registration to `bootstrap` in [PR #26517](https://github.com/strapi/strapi/pull/26517).
+- **Register before the MCP server starts.** Strapi locks the tool list at startup, and the start happens at a specific point in the boot order: plugin `register()` → plugin `bootstrap()` → MCP server starts → app `bootstrap()` (your `src/index.ts`). So from inside a plugin you can register in either `register()` or `bootstrap()`. From the app's own `src/index.ts`, only `register()` is early enough; registering in `src/index.ts` `bootstrap()` runs after the server has started and throws. `register()` is the cleanest place. `bootstrap()` runs later, after Strapi's services (the document service, the database) are fully ready, so register there if your tool's setup needs them at registration time. (The tool's `createHandler` always runs at request time, so handlers have full service access either way.) Strapi clarified this registration lifecycle in [PR #26517](https://github.com/strapi/strapi/pull/26517).
 - **Required fields are `name`, `title`, `description`, `resolveOutputSchema`, and either `auth` or `devModeOnly`.** `resolveInputSchema` is optional; leave it out for a tool that takes no arguments. The schema fields are functions, not plain objects. Strapi calls them on each request and passes the caller's permissions (`context.userAbility`), so a tool can return a narrower schema for a less-privileged token. The `z` you build the schema with (Strapi's bundled copy of [Zod](https://github.com/colinhacks/zod)) has to come from `@strapi/utils`, not the `zod` package directly.
 
 Here is the smallest working tool, registered straight in `src/index.ts`:
@@ -220,7 +220,7 @@ Check the tools you want this token to expose and **Save**. The same checkboxes 
 
 The gating works both ways. A tool you granted is visible in `tools/list`, and you can call it. A tool you did not grant is not in the list, and calling it by name is rejected with `Tool <name> disabled` rather than silently ignored. So with the three boxes above checked, `get_stats_overview`, `list_recent_articles`, and `get_content_api_docs` work. The other two stay gated until you check them too. The example repo's `npm run test:mcp` checks exactly this for whatever you've granted: granted tools are callable, gated tools reject the call.
 
-`auth.policies` is the coarse gate: it decides whether the token sees the tool at all. There's a finer layer too. The handler factory receives `(strapi, context)`, where `context.userAbility` is the caller's permission set and `context.user` is the token owner. So inside the handler you can do per-entity or per-field checks the coarse gate can't express, for example refusing a specific document the token may list but not read:
+`auth.policies` is the first gate: it decides whether the token sees the tool at all. You can add a second, finer check inside the handler. The handler gets `(strapi, context)`: `context.userAbility` is the caller's permission set, and `context.user` is the token owner. With those you can check a single document or field, which the policy gate can't. For example, refuse one document the token may list but not read:
 
 ```ts
 createHandler: (strapi, context) => async ({ args }) => {
@@ -408,7 +408,7 @@ const tool: StrapiMcpToolModule = {
 };
 ```
 
-An earlier draft of this plugin shipped a custom `create_article_draft` tool that wrapped the write and carried the "call the guide first" instruction in its own description. We dropped it, for two reasons. It overlapped with the built-in `create_article` and `update_article` tools, so a model facing both has to guess which one to use. And to write articles it had to borrow the same `plugin::content-manager.explorer.create` permission the built-in tool already uses, so the two were doing the same job through the same permission. The built-in tool already writes articles with the right permissions. The only piece worth adding is the format guide.
+An earlier draft of this plugin shipped a custom `create_article_draft` tool that created the article itself and carried the "call the guide first" instruction in its description. We dropped it, for two reasons. It overlapped with the built-in `create_article` and `update_article` tools, so a model facing both has to guess which one to use. And to write articles it had to borrow the same `plugin::content-manager.explorer.create` permission the built-in tool already uses, so the two were doing the same job through the same permission. The built-in tool already writes articles with the right permissions. The only piece worth adding is the format guide.
 
 This choice costs us something. With a custom save tool, we owned its description, so we could put `REQUIRED: call get_article_authoring_guide first` right where the model would read it. The model would then chain the two on its own. The built-in `create_article` tool's description is not ours to edit, so that automatic trigger is gone. The guide tool still exists, but the model only reads it if something tells it to: the user asking for it, or (once Strapi supports it) server instructions. That gap is what the next section is about.
 
@@ -430,7 +430,7 @@ sequenceDiagram
 
 ### Why not MCP server instructions?
 
-There is a better fit for this in the protocol: [MCP server instructions](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/). The server sends a block of text when a client connects, and the client adds it to the model's system prompt. This is the part built for "the model should always read X before using this server." It loads on connect, without the user doing anything.
+There is a better fit for this in the protocol: [MCP server instructions](https://blog.modelcontextprotocol.io/posts/2025-11-03-using-server-instructions/). The server sends a block of text when a client connects, and the client is meant to add it to the model's system prompt (exactly how a client uses it is up to that client). This is the part built for "the model should always read X before using this server," and it loads on connect without the user doing anything.
 
 Strapi 5.47 does not let a plugin set it. The MCP SDK underneath supports an `instructions` field, but Strapi builds the server (in `McpServerFactory.ts`, with `new McpServer(...)`) without passing one, and there is no plugin method to supply it. We wrote [a draft proposal in the repo](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension/blob/main/PR-DRAFT-mcp-server-instructions.md) (`PR-DRAFT-mcp-server-instructions.md`) to add a `setInstructions()` method to `strapi.ai.mcp`.
 
