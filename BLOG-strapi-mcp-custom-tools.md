@@ -25,6 +25,8 @@ The difference that matters: some of these the model picks up and uses on its ow
 
 The "auto-loaded" column is the one to watch. It decides whether the model uses a capability on its own or waits for the user to trigger it.
 
+That table is the MCP protocol in general. Strapi's built-in server does not fill all four rows. It auto-derives **tools** for your content types, and custom tools plug in there too. It ships no prompts or resources by default, though a plugin can register them (see [Beyond tools](#beyond-tools-prompts-and-resources)). And it does not send server instructions at all yet (see [Why not MCP server instructions?](#why-not-mcp-server-instructions)). So on Strapi today, tools are the surface you actually work with, and the rest of this post is about tools.
+
 ```mermaid
 flowchart LR
     subgraph "MCP Client (Claude Code / Cursor / …)"
@@ -56,11 +58,9 @@ export default ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Server =>
 });
 ```
 
-You're adding the `mcp` key, not replacing the file. A fresh Strapi 5.47 generates `config/server.ts` as `const config = ({ env }): Core.Config.Server => ({ … }); export default config;`. Keep that shape and add `mcp: { enabled: true }` to the returned object; the snippet above just shows the result.
-
 Restart Strapi. The MCP endpoint is now live at `http://localhost:1337/mcp`.
 
-> Enabling the server is config-only; there is no admin-panel toggle. To change the connection and request timeouts (`connectTimeoutMs`, `requestTimeoutMs`), see [Advanced options](https://docs.strapi.io/cms/features/strapi-mcp-server#advanced-options).
+> To tune the transport timeouts (`connectTimeoutMs`, `requestTimeoutMs`), see [Advanced options](https://docs.strapi.io/cms/features/strapi-mcp-server#advanced-options).
 
 ### Heads-up #1: the right token
 
@@ -266,7 +266,7 @@ export default () => ({
 });
 ```
 
-If `config/plugins.ts` already has entries, add the `strapi-extended-mcp` key alongside them rather than replacing the file. A brand-new project may not have this file at all; create it with the export above.
+(`config/plugins.ts` may not exist in a fresh project; create it with the export above.)
 
 ## Step 6: The modular folder pattern
 
