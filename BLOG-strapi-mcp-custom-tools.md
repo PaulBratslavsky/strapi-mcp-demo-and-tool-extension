@@ -25,7 +25,7 @@ The difference that matters: some of these the model picks up and uses on its ow
 
 The "auto-loaded" column is the one to watch. It decides whether the model uses a capability on its own or waits for the user to trigger it.
 
-That table is the MCP protocol in general. Out of the box, Strapi fills only one of those rows: it auto-derives **tools** from your content types. It registers no prompts or resources by default, and it sends no server instructions. So on a fresh Strapi, tools are the whole surface.
+Out of the box, Strapi fills only one of those rows: it auto-derives **tools** from your content types. It registers no prompts or resources by default, and it sends no server instructions. So on a fresh Strapi, tools are the whole surface.
 
 ## Before you begin
 
@@ -176,6 +176,8 @@ export default {
 ```
 
 Restart Strapi. The model now sees a `get_stats_overview` tool, calls it when it needs those counts, and gets back the typed object your schema describes.
+
+That is a custom tool, start to finish. The rest of this post builds on the same `registerTool` call: giving a tool its own permission, packaging tools in a plugin, and chaining a tool into a multi-step workflow. The [example repo](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension) has more tools to read through, including `list_recent_articles` and `get_content_api_docs`.
 
 ### A note on that `auth` block
 
