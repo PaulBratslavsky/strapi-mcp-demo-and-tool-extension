@@ -29,7 +29,7 @@ That table is the MCP protocol in general. Out of the box, Strapi fills only one
 
 ## Step 1: Turn on the built-in MCP server
 
-The MCP server is a [Beta feature that requires Strapi 5.47.0 or later](https://docs.strapi.io/cms/features/strapi-mcp-server). On that version it takes one line of config. Following the [code-based configuration docs](https://docs.strapi.io/cms/features/strapi-mcp-server#strapi-code-based-configuration), open `config/server.ts` and add `mcp.enabled: true`:
+You need a Strapi v5 project on 5.47.0 or later. That is when the built-in MCP server [shipped, as a Beta feature](https://docs.strapi.io/cms/features/strapi-mcp-server). New to Strapi? `npx create-strapi-app@latest my-app` scaffolds one. To turn the server on, open `config/server.ts` and add `mcp.enabled: true`:
 
 ```ts
 // config/server.ts
@@ -103,9 +103,7 @@ For every content type, the built-in MCP server creates a set of tools automatic
 
 It does not cover anything you wrote by hand: a custom controller, an aggregation, a computed view, a multi-step flow. If you have a `src/api/<thing>/controllers/<thing>.ts` with your own logic in it, the MCP server has no tool for it.
 
-This project has a `stats` API with a custom controller that adds up counts.
-
-> The examples from here on assume the example repo's content types: `article`, `author`, and `category`. On a fresh `create-strapi-app` those don't exist, so a tool that calls `strapi.documents('api::article.article')` fails to compile. Either clone the [example repo](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension), create those types first, or swap in a content type you actually have. (The plugin's `list_content_types` tool later is content-agnostic and works on any project.)
+Say you've written a `stats` service that aggregates a few counts:
 
 ```ts
 // src/api/stats/services/stats.ts
@@ -121,7 +119,7 @@ export default {
 };
 ```
 
-None of the built-in tools know this controller exists. To expose it, you register a custom tool.
+None of the built-in tools know it exists. To expose it to the model, you register a custom tool.
 
 ## Step 3: Register a custom tool
 
