@@ -60,7 +60,7 @@ You're adding the `mcp` key, not replacing the file. A fresh Strapi 5.47 generat
 
 Restart Strapi. The MCP endpoint is now live at `http://localhost:1337/mcp`.
 
-> You can also turn the server on from the admin UI instead of editing config. See [Strapi admin panel configuration](https://docs.strapi.io/cms/features/strapi-mcp-server#strapi-admin-panel-configuration). To change the connection and request timeouts (`connectTimeoutMs`, `requestTimeoutMs`), see [Advanced options](https://docs.strapi.io/cms/features/strapi-mcp-server#advanced-options).
+> Enabling the server is config-only; there is no admin-panel toggle. To change the connection and request timeouts (`connectTimeoutMs`, `requestTimeoutMs`), see [Advanced options](https://docs.strapi.io/cms/features/strapi-mcp-server#advanced-options).
 
 ### Heads-up #1: the right token
 
