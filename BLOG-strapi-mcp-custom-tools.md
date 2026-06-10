@@ -56,6 +56,8 @@ export default ({ env }: Core.Config.Shared.ConfigParams): Core.Config.Server =>
 });
 ```
 
+You're adding the `mcp` key, not replacing the file. A fresh Strapi 5.47 generates `config/server.ts` as `const config = ({ env }): Core.Config.Server => ({ … }); export default config;`. Keep that shape and add `mcp: { enabled: true }` to the returned object; the snippet above just shows the result.
+
 Restart Strapi. The MCP endpoint is now live at `http://localhost:1337/mcp`.
 
 > You can also turn the server on from the admin UI instead of editing config. See [Strapi admin panel configuration](https://docs.strapi.io/cms/features/strapi-mcp-server#strapi-admin-panel-configuration). To change the connection and request timeouts (`connectTimeoutMs`, `requestTimeoutMs`), see [Advanced options](https://docs.strapi.io/cms/features/strapi-mcp-server#advanced-options).
@@ -96,7 +98,9 @@ For every content type, the built-in MCP server creates a set of tools automatic
 
 It does not cover anything you wrote by hand: a custom controller, an aggregation, a computed view, a multi-step flow. If you have a `src/api/<thing>/controllers/<thing>.ts` with your own logic in it, the MCP server has no tool for it.
 
-This project has a `stats` API with a custom controller that adds up counts:
+This project has a `stats` API with a custom controller that adds up counts.
+
+> The examples from here on assume the example repo's content types: `article`, `author`, and `category`. On a fresh `create-strapi-app` those don't exist, so a tool that calls `strapi.documents('api::article.article')` fails to compile. Either clone the [example repo](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension), create those types first, or swap in a content type you actually have. (The plugin's `list_content_types` tool later is content-agnostic and works on any project.)
 
 ```ts
 // src/api/stats/services/stats.ts
@@ -216,6 +220,19 @@ Check the tools you want this token to expose and **Save**. The same checkboxes 
 
 The gating works both ways. A tool you granted is visible in `tools/list`, and you can call it. A tool you did not grant is not in the list, and calling it by name is rejected with `Tool <name> disabled` rather than silently ignored. So with the three boxes above checked, `get_stats_overview`, `list_recent_articles`, and `get_content_api_docs` work. The other two stay gated until you check them too. The example repo's `npm run test:mcp` checks exactly this for whatever you've granted: granted tools are callable, gated tools reject the call.
 
+`auth.policies` is the coarse gate: it decides whether the token sees the tool at all. There's a finer layer too. The handler factory receives `(strapi, context)`, where `context.userAbility` is the caller's permission set and `context.user` is the token owner. So inside the handler you can do per-entity or per-field checks the coarse gate can't express, for example refusing a specific document the token may list but not read:
+
+```ts
+createHandler: (strapi, context) => async ({ args }) => {
+  if (!context.userAbility.can('plugin::content-manager.explorer.read', 'api::article.article')) {
+    return { content: [{ type: 'text', text: 'Not allowed.' }], isError: true };
+  }
+  // …safe to proceed
+},
+```
+
+This is the same engine Strapi's own content-type tools use to narrow fields and locales per request.
+
 So why bother with a plugin?
 
 ## Step 4: Why we wrapped this in a plugin
@@ -248,6 +265,8 @@ export default () => ({
   },
 });
 ```
+
+If `config/plugins.ts` already has entries, add the `strapi-extended-mcp` key alongside them rather than replacing the file. A brand-new project may not have this file at all; create it with the export above.
 
 ## Step 6: The modular folder pattern
 
@@ -338,15 +357,24 @@ export const registerMcpTools = (strapi: Core.Strapi) => {
 };
 ```
 
-And the plugin's `register.ts` is just:
+And the plugin's `register.ts` wires both halves together: it registers the
+admin permissions, then the tools. (Register the permissions first so the actions
+exist before a tool's `auth.policies` references them.)
 
 ```ts
 // server/src/register.ts
+import { registerMcpPermissions } from './mcp/permissions';
 import { registerMcpTools } from './mcp';
-export default ({ strapi }) => { registerMcpTools(strapi); };
+
+export default async ({ strapi }) => {
+  await registerMcpPermissions(strapi);
+  registerMcpTools(strapi);
+};
 ```
 
-That is the whole wiring. After this, every new tool is one new file plus one line in the list.
+That is the whole wiring. After this, every new tool is one new file plus one
+line in the list (and, if it needs its own permission, one entry in
+`permissions.ts`).
 
 ## Step 7: Chained tools for LLM workflows
 
@@ -408,7 +436,63 @@ Strapi 5.47 does not let a plugin set it. The MCP SDK underneath supports an `in
 
 Until that exists, the two-tool approach (a guide tool plus a save tool whose description points at it) is the way to make a model follow a multi-step workflow. It is also what larger MCP servers such as Linear, Sentry, and GitHub do today.
 
-One more reason to stay with tools: **`registerTool` is the only thing the [Plugin API](https://docs.strapi.io/cms/features/strapi-mcp-server#plugin-api) documents.** The code has types for registering prompts and resources, but those are not part of the documented, supported API. Building the workflow out of tools keeps the whole thing on the supported path.
+One more reason to stay with tools here: a tool is the only capability the model calls on its own. Prompts and resources are registerable too (the next section shows how), but a prompt only runs when the user picks it, and many clients never auto-fetch resources, so neither one drives an autonomous workflow.
+
+## Beyond tools: prompts and resources
+
+Tools are not the only thing a plugin can register. `strapi.ai.mcp` also takes **prompts** and **resources**, and the same rules apply to all three: register them before the server starts (in `register()` or the plugin's `bootstrap()`), and gate each one with `auth.policies` or mark it `devModeOnly`.
+
+They cover different needs:
+
+- A **tool** is something the model decides to call. That is why the workflow above is built from tools.
+- A **prompt** is a message template the user picks; it shows up as a slash command in the client. The model does not fetch it on its own.
+- A **resource** is read-only content behind a fixed URI that a client can read. Not every client fetches resources automatically.
+
+A prompt registration:
+
+```ts
+strapi.ai.mcp.registerPrompt({
+  name: 'strapi-extended-mcp_write-release-note',
+  title: 'Write release note',
+  description: 'Draft a release note for a plugin change.',
+  auth: { policies: [{ action: 'admin::webhooks.read' }] },
+  argsSchema: z.object({ change: z.string().min(1) }),
+  createHandler: () => async (args) => ({
+    messages: [
+      {
+        role: 'user',
+        content: { type: 'text', text: `Write a concise release note for: ${args.change}` },
+      },
+    ],
+  }),
+});
+```
+
+A resource registration:
+
+```ts
+strapi.ai.mcp.registerResource({
+  name: 'strapi-extended-mcp_config',
+  uri: 'strapi://strapi-extended-mcp/config',
+  metadata: {
+    title: 'Plugin config',
+    description: 'Public configuration for the plugin.',
+    mimeType: 'application/json',
+  },
+  auth: { policies: [{ action: 'admin::webhooks.read' }] },
+  createHandler: (strapi) => async (uri) => ({
+    contents: [
+      {
+        uri: uri.href,
+        mimeType: 'application/json',
+        text: JSON.stringify(strapi.config.get('plugin::strapi-extended-mcp.public', {}), null, 2),
+      },
+    ],
+  }),
+});
+```
+
+One naming rule applies to all three: capability names are **global across every plugin** on the server. Prefix yours with the plugin name (`strapi-extended-mcp_…`) so it can't collide with a tool from another plugin. (The example tools in this post use short names like `get_stats_overview` for readability; in a plugin you'd publish, namespace them.)
 
 ## Gotchas
 
