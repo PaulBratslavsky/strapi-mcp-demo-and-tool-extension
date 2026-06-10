@@ -31,10 +31,13 @@ Out of the box, Strapi fills only one of those rows: it auto-derives **tools** f
 
 You need a Strapi v5 project on 5.47.0 or later. That is when the built-in MCP server [shipped, as a Beta feature](https://docs.strapi.io/cms/features/strapi-mcp-server). The examples here count `article`, `author`, and `category` entries, so the project needs those content types with some data in them.
 
-The `--example` flag on `create-strapi-app` gives you exactly that: a fresh project preloaded with Strapi's example blog (articles, authors, and categories). Add `--skip-cloud` so it doesn't stop to ask about a Strapi Cloud account.
+The `--example` flag on `create-strapi-app` scaffolds Strapi's example blog: the `article`, `author`, and `category` content types, plus a `seed:example` script that loads sample entries. `--skip-cloud` and `--non-interactive` keep it from stopping for the Cloud-account and setup prompts (it defaults to SQLite and TypeScript).
 
 ```bash
-npx create-strapi-app@latest my-app --example --skip-cloud
+npx create-strapi-app@latest my-app --example --skip-cloud --non-interactive
+cd my-app
+npm run seed:example   # load the sample articles, authors, and categories
+npm run develop
 ```
 
 This is a clean project, so you add MCP and build the custom tools yourself by following along. The [finished version](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension) (this post's example repo, with MCP and the plugin already wired up) is there to compare against. Already have a Strapi 5.47+ project? Use it, and put your own content types in place of `article`/`author`/`category`.
