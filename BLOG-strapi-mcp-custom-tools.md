@@ -27,9 +27,25 @@ The "auto-loaded" column is the one to watch. It decides whether the model uses 
 
 That table is the MCP protocol in general. Out of the box, Strapi fills only one of those rows: it auto-derives **tools** from your content types. It registers no prompts or resources by default, and it sends no server instructions. So on a fresh Strapi, tools are the whole surface.
 
+## Before you begin
+
+You need a Strapi v5 project on 5.47.0 or later. That is when the built-in MCP server [shipped, as a Beta feature](https://docs.strapi.io/cms/features/strapi-mcp-server). The examples here count `article`, `author`, and `category` entries, so the project needs those content types with some data in them.
+
+The quickest way to get that is the example repo. It has the content types, sample data, and a seed script:
+
+```bash
+git clone https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension.git
+cd strapi-mcp-demo-and-tool-extension
+npm install
+npm run seed:example   # loads sample articles, authors, and categories
+npm run develop
+```
+
+That repo is the finished result, so you can read along against working code. To build it yourself instead, start from any Strapi 5.47+ project and use your own content types in place of `article`/`author`/`category`.
+
 ## Step 1: Turn on the built-in MCP server
 
-You need a Strapi v5 project on 5.47.0 or later. That is when the built-in MCP server [shipped, as a Beta feature](https://docs.strapi.io/cms/features/strapi-mcp-server). New to Strapi? `npx create-strapi-app@latest my-app` scaffolds one. To turn the server on, open `config/server.ts` and add `mcp.enabled: true`:
+The server is off by default. Open `config/server.ts` and add `mcp.enabled: true`:
 
 ```ts
 // config/server.ts
