@@ -31,17 +31,13 @@ That table is the MCP protocol in general. Out of the box, Strapi fills only one
 
 You need a Strapi v5 project on 5.47.0 or later. That is when the built-in MCP server [shipped, as a Beta feature](https://docs.strapi.io/cms/features/strapi-mcp-server). The examples here count `article`, `author`, and `category` entries, so the project needs those content types with some data in them.
 
-The quickest way to get that is the example repo. It has the content types, sample data, and a seed script:
+The `--example` flag on `create-strapi-app` gives you exactly that: a fresh project preloaded with Strapi's example blog (articles, authors, and categories).
 
 ```bash
-git clone https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension.git
-cd strapi-mcp-demo-and-tool-extension
-npm install
-npm run seed:example   # loads sample articles, authors, and categories
-npm run develop
+npx create-strapi-app@latest my-app --example
 ```
 
-That repo is the finished result, so you can read along against working code. To build it yourself instead, start from any Strapi 5.47+ project and use your own content types in place of `article`/`author`/`category`.
+This is a clean project, so you add MCP and build the custom tools yourself by following along. The [finished version](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension) (this post's example repo, with MCP and the plugin already wired up) is there to compare against. Already have a Strapi 5.47+ project? Use it, and put your own content types in place of `article`/`author`/`category`.
 
 ## Step 1: Turn on the built-in MCP server
 
