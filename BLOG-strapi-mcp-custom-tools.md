@@ -25,7 +25,7 @@ The difference that matters: some of these the model picks up and uses on its ow
 
 The "auto-loaded" column is the one to watch. It decides whether the model uses a capability on its own or waits for the user to trigger it.
 
-That table is the MCP protocol in general. Strapi's built-in server does not fill all four rows. It auto-derives **tools** for your content types, and custom tools plug in there too. It ships no prompts or resources by default, though a plugin can register them (see [Beyond tools](#beyond-tools-prompts-and-resources)). And it does not send server instructions at all yet (see [Why not MCP server instructions?](#why-not-mcp-server-instructions)). So on Strapi today, tools are the surface you actually work with, and the rest of this post is about tools.
+That table is the MCP protocol in general. Out of the box, Strapi fills only one of those rows: it auto-derives **tools** from your content types. It registers no prompts or resources by default, and it sends no server instructions. So on a fresh Strapi, tools are the whole surface.
 
 ```mermaid
 flowchart LR
