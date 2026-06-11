@@ -142,7 +142,7 @@ It does not cover anything you wrote by hand: a custom controller, an aggregatio
 
 Let's build our first custom tool: one that reports how much content the project has, counting published articles, authors, and categories. No built-in tool does that aggregation, so we write the logic ourselves and then hand it to the model.
 
-The logic goes in a **service**, and that is all the MCP tool needs: it will call the service directly. One file under `src/api/stats/`:
+We'll set it up as a normal Strapi API endpoint, three small files under `src/api/stats/`. The **service** holds the logic:
 
 ```ts
 // src/api/stats/services/stats.ts
@@ -158,9 +158,7 @@ export default {
 };
 ```
 
-Restart Strapi. Strapi loads the `services/` folder on its own, so this registers as `api::stats.stats` with no route or controller needed. None of the built-in MCP tools know it exists, so the next step registers a custom tool that calls it.
-
-Want the same counts over the REST API too, at `GET /api/stats`? Add a controller and a route. The MCP tool does not use these:
+A **controller** calls that service, and a **route** mounts the controller at `GET /api/stats`:
 
 ```ts
 // src/api/stats/controllers/stats.ts
@@ -184,6 +182,17 @@ export default {
   ],
 };
 ```
+
+Restart Strapi. You now have `GET /api/stats` over REST, and the service is registered as `api::stats.stats`.
+
+**Service or controller: which does the MCP tool call?** The service. The two layers do different jobs:
+
+- A **service** is the logic. Call it from anywhere with `strapi.service('api::stats.stats').overview()` and it returns a plain value.
+- A **controller** is the HTTP layer. It takes the request context (`ctx`), and on the way out it **sanitizes** the response: it strips private fields and relations the caller is not allowed to see, based on the content-type schema and the request's permissions. The [controllers docs](https://docs.strapi.io/cms/backend-customization/controllers) cover `sanitizeOutput`, `sanitizeInput`, and `validateQuery`.
+
+An MCP tool handler is not an HTTP request, so it calls the service directly and skips that sanitization. For `stats` that is fine, since the result is just counts (nothing to leak). But a tool that returns entity data, say article rows, would return them raw, including fields the token should not see. There you sanitize before returning, with `strapi.contentAPI.sanitize.output(...)` and the caller's permissions (the handler is handed `context.userAbility`). The built-in content-type tools already sanitize; a hand-written tool does not unless you add it.
+
+None of the built-in MCP tools know `api::stats.stats` exists, so the next step registers a custom tool that calls it.
 
 ## Step 3: Register a custom tool
 
