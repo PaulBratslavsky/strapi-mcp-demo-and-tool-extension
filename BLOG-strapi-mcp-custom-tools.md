@@ -142,7 +142,7 @@ It does not cover anything you wrote by hand: a custom controller, an aggregatio
 
 Let's build our first custom tool: one that reports how much content the project has, counting published articles, authors, and categories. No built-in tool does that aggregation, so we write the logic ourselves and then hand it to the model.
 
-First the logic. A custom endpoint in Strapi v5 is three small files under `src/api/stats/`: a **service** that does the work, a **controller** that calls it, and a **route** that mounts it. Create them:
+The logic goes in a **service**, and that is all the MCP tool needs: it will call the service directly. One file under `src/api/stats/`:
 
 ```ts
 // src/api/stats/services/stats.ts
@@ -157,6 +157,10 @@ export default {
   },
 };
 ```
+
+Restart Strapi. Strapi loads the `services/` folder on its own, so this registers as `api::stats.stats` with no route or controller needed. None of the built-in MCP tools know it exists, so the next step registers a custom tool that calls it.
+
+Want the same counts over the REST API too, at `GET /api/stats`? Add a controller and a route. The MCP tool does not use these:
 
 ```ts
 // src/api/stats/controllers/stats.ts
@@ -180,8 +184,6 @@ export default {
   ],
 };
 ```
-
-Restart Strapi. The service is now registered as `api::stats.stats`. None of the built-in MCP tools know it exists, though, so the next step registers a custom tool that calls it.
 
 ## Step 3: Register a custom tool
 
