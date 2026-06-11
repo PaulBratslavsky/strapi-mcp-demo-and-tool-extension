@@ -40,6 +40,14 @@ cd my-app
 npm run develop
 ```
 
+Create your first **Admin User**:
+
+![create-user.png](img/create-user.png)
+
+Then just make sure to publish example content:
+
+![publish-content.png](img/publish-content.png)
+
 This is a clean project, so you add MCP and build the custom tools yourself by following along. The [finished version](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension) (this post's example repo, with MCP and the plugin already wired up) is there to compare against. Already have a Strapi 5.47+ project? Use it, and put your own content types in place of `article`/`author`/`category`.
 
 ## Step 1: Turn on the built-in MCP server
@@ -69,13 +77,21 @@ The MCP server uses **Admin API Tokens**, not Content API Tokens. These are two 
 - ❌ **Settings → API Tokens**: these are for the Content API (`/api/...`). MCP rejects them with a 401.
 - ✅ **Settings → Admin Tokens**: this is the one MCP accepts.
 
-Give the Admin token the **least** access it needs, and add permissions as you go. This is the opposite of the usual "Full Access for local dev" habit, and the reason is specific to MCP: every content-type permission you enable turns into a set of MCP tools (up to about six per content type: `list`, `get`, `create`, `update`, `delete`, `publish`). Enable everything across, say, ten content types and the client sees roughly sixty tools, each with a full schema. All of that lands in the model's context before it does any work. A narrow token keeps the tool list short and the context focused on what the workflow actually touches. ("Full Access" in one click is really a Content API token idea; for Admin tokens, scope deliberately.) The token value is shown only once, so copy it as soon as it appears.
+Give the Admin token the **least** access it needs, and add permissions as you go. This is the opposite of the usual "Full Access for local dev" habit, and the reason is specific to MCP: every content-type permission you enable turns into a set of MCP tools (up to about six per content type: `list`, `get`, `create`, `update`, `delete`, `publish`). 
+
+![set-permissions.png](img/set-permissions.png)
+
+Enable everything across, say, ten content types and the client sees roughly sixty tools, each with a full schema. All of that lands in the model's context before it does any work. A narrow token keeps the tool list short and the context focused on what the workflow actually touches. ("Full Access" in one click is really a Content API token idea; for Admin tokens, scope deliberately.) The token value is shown only once, so copy it as soon as it appears.
 
 ### Heads-up #2: the token decides which tools appear
 
 The built-in tools you can use depend on the token's permissions (custom tools come later). A read-only token shows only the `list_*` and `get_*` tools. 
 
 A token with write access also shows create, update, delete, and publish. You can't see more tools than the token allows; the docs cover this under [Permission boundaries](https://docs.strapi.io/cms/features/strapi-mcp-server#permission-boundaries).
+
+Copy your token so you can use it to connect to Claude Code, Claude desktop or any other platform.
+
+![get-token.png](img/get-token.png)
 
 ### Connect from Claude Code
 
@@ -112,13 +128,21 @@ Start a new Claude Code session and run `/mcp`. It should show `strapi-mcp ✓ C
 
 Cursor and Windsurf have their own config formats; the [AI client configuration](https://docs.strapi.io/cms/features/strapi-mcp-server#ai-client-configuration) docs cover all four.
 
+I will be testing in Claude Desktop. Once I enable the connector, I am able to ask "What tools does my Strapi MCP have?" 
+
+![connect-claude.png](img/connect-claude.png)
+
+![strapi-tools.png](img/strapi-tools.png)
+
 ## Step 2: When the built-in tools aren't enough
 
 For every content type, the built-in MCP server creates a set of tools automatically: `list`, `get`, `create`, `update`, `delete`, plus `publish`, `unpublish`, and `discard_draft` when Draft & Publish is on. The full list is in the [Content-type tools](https://docs.strapi.io/cms/features/strapi-mcp-server#content-type-tools) docs. This covers reading and writing entries.
 
 It does not cover anything you wrote by hand: a custom controller, an aggregation, a computed view, a multi-step flow. If you have a `src/api/<thing>/controllers/<thing>.ts` with your own logic in it, the MCP server has no tool for it.
 
-Say you've written a `stats` service that aggregates a few counts:
+Let's build our first custom tool: one that reports how much content the project has, counting published articles, authors, and categories. No built-in tool does that aggregation, so we write the logic ourselves and then hand it to the model.
+
+First the logic. A custom endpoint in Strapi v5 is three small files under `src/api/stats/`: a **service** that does the work, a **controller** that calls it, and a **route** that mounts it. Create them:
 
 ```ts
 // src/api/stats/services/stats.ts
@@ -134,7 +158,30 @@ export default {
 };
 ```
 
-None of the built-in tools know it exists. To expose it to the model, you register a custom tool.
+```ts
+// src/api/stats/controllers/stats.ts
+export default {
+  async index(ctx) {
+    ctx.body = await strapi.service('api::stats.stats').overview();
+  },
+};
+```
+
+```ts
+// src/api/stats/routes/stats.ts
+export default {
+  routes: [
+    {
+      method: 'GET',
+      path: '/stats',
+      handler: 'stats.index',
+      config: { policies: [], middlewares: [] },
+    },
+  ],
+};
+```
+
+Restart Strapi. The service is now registered as `api::stats.stats`. None of the built-in MCP tools know it exists, though, so the next step registers a custom tool that calls it.
 
 ## Step 3: Register a custom tool
 
