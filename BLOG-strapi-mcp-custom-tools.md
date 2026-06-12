@@ -183,7 +183,7 @@ export default {
 };
 ```
 
-Restart Strapi. The route is mounted at `GET /api/stats`, and the service is registered as `api::stats.stats`. Like every Strapi route, `/api/stats` is protected by default: calling it without access returns `403 Forbidden`. To use it over REST, grant the **Public** role permission for it (Settings, Users & Permissions Plugin, Roles, Public, check **Stats**), or call it with an API token. The MCP tool we build next does not go through this route at all; it calls the `api::stats.stats` service directly, so it never touches that REST permission.
+Restart Strapi. The route is mounted at `GET /api/stats` and the service is registered as `api::stats.stats`. Like any Strapi route, `/api/stats` is protected, so to call it over REST you grant the Public role or use an API token. The MCP tool doesn't need that; it calls the `api::stats.stats` service directly.
 
 **Service or controller: which does the MCP tool call?** The service. The two layers do different jobs:
 
