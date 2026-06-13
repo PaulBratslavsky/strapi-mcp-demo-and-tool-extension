@@ -50,15 +50,29 @@ Then just make sure to publish example content:
 
 This is a clean project, so you add MCP and build the custom tools yourself by following along. The [finished version](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension) (this post's example repo, with MCP and the plugin already wired up) is there to compare against. Already have a Strapi 5.47+ project? Use it, and put your own content types in place of `article`/`author`/`category`.
 
-## Shortcut: the included Claude Code skill
+## Shortcut: just want it set up? Use the skill
 
-The example repo ships a Claude Code skill, [`setup-strapi-mcp`](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension/tree/main/.claude/skills/setup-strapi-mcp), that automates everything in Steps 1–6. Clone the repo, open it in Claude Code, and say *"set up strapi mcp"*. The skill enables the MCP server in `config/server.ts`, then scaffolds an example custom tool — inline in `src/index.ts`, as a generated plugin, or both — and the plugin tool comes with its own grantable admin permission so you can see the RBAC wiring end to end.
+If you only want a working MCP server and a custom tool in **your own project** — and don't need the step-by-step understanding — the example repo ships a Claude Code skill, [`setup-strapi-mcp`](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension/tree/main/.claude/skills/setup-strapi-mcp), that does the whole setup for you. It works on any Strapi v5 project on 5.47+, not just this example. Here is the full walk-through:
 
-So you have two ways through this post. Reach for the skill when you just want a working scaffold fast. Follow the walkthrough below by hand when you want to understand every moving part — it is the same work the skill does, done step by step.
+**1. Get the skill into your project.** Copy the `setup-strapi-mcp/` folder out of the example repo into your own project's `.claude/skills/` directory (Claude Code loads skills from there). Put it in `~/.claude/skills/` instead if you want it available in every project on your machine.
+
+```bash
+# from your Strapi project root
+mkdir -p .claude/skills
+cp -R /path/to/strapi-mcp-demo-and-tool-extension/.claude/skills/setup-strapi-mcp .claude/skills/
+```
+
+**2. Open your project in Claude Code and run it.** Just say *"set up strapi mcp"*. The skill first checks you are on Strapi 5.47+, then asks whether to register the example tool **inline** (`src/index.ts`), as a **plugin**, or **both** — pick whichever you want (both is a good way to see the difference).
+
+**3. Let it scaffold.** It enables the MCP server in `config/server.ts`, writes the example tool(s), and — on the plugin path — registers a grantable admin permission and builds the plugin. It also tells you exactly what it changed.
+
+**4. Finish in the admin (the one manual part).** Create an **Admin Token** at *Settings → Admin Tokens*, grant the plugin tool's permission on the token's **Plugins** tab, then point your MCP client at `http://localhost:1337/mcp` with that token (see [Connect from Claude Code](#connect-from-claude-code) below).
+
+That is the fast path, done. The rest of this post builds the same thing by hand — reach for the walkthrough below when you want to understand every moving part, not just get the scaffold.
 
 ## Step 1: Turn on the built-in MCP server
 
-The server is off by default. Open `config/server.ts` and add `mcp.enabled: true`:
+The server is off by default. **Edit `config/server.ts`** and add the `mcp` key, keeping the existing `host`, `port`, and `app` keys:
 
 ```ts
 // config/server.ts
@@ -148,7 +162,9 @@ It does not cover anything you wrote by hand: a custom controller, an aggregatio
 
 Let's build our first custom tool: one that reports how much content the project has, counting published articles, authors, and categories. No built-in tool does that aggregation, so we write the logic ourselves and then hand it to the model.
 
-We'll set it up as a normal Strapi API endpoint, three small files under `src/api/stats/`. The **service** holds the logic:
+We'll set it up as a normal Strapi API endpoint: three small files under `src/api/stats/`, created one at a time.
+
+**Create `src/api/stats/services/stats.ts`** — the service holds the logic:
 
 ```ts
 // src/api/stats/services/stats.ts
@@ -164,7 +180,7 @@ export default {
 };
 ```
 
-A **controller** calls that service, and a **route** mounts the controller at `GET /api/stats`:
+**Create `src/api/stats/controllers/stats.ts`** — a thin HTTP layer that calls the service:
 
 ```ts
 // src/api/stats/controllers/stats.ts
@@ -174,6 +190,8 @@ export default {
   },
 };
 ```
+
+**Create `src/api/stats/routes/stats.ts`** — this mounts the controller at `GET /api/stats`:
 
 ```ts
 // src/api/stats/routes/stats.ts
@@ -207,7 +225,7 @@ The function to call is `strapi.ai.mcp.registerTool({...})`; the [Plugin API](ht
 - **Register before the MCP server starts.** Strapi locks the tool list at startup, and the start happens at a specific point in the boot order: plugin `register()` → plugin `bootstrap()` → MCP server starts → app `bootstrap()` (your `src/index.ts`). So from inside a plugin you can register in either `register()` or `bootstrap()`. From the app's own `src/index.ts`, only `register()` is early enough; registering in `src/index.ts` `bootstrap()` runs after the server has started and throws. `register()` is the cleanest place. `bootstrap()` runs later, after Strapi's services (the document service, the database) are fully ready, so register there if your tool's setup needs them at registration time. (The tool's `createHandler` always runs at request time, so handlers have full service access either way.) Strapi clarified this registration lifecycle in [PR #26517](https://github.com/strapi/strapi/pull/26517).
 - **Required fields are `name`, `title`, `description`, `resolveOutputSchema`, and either `auth` or `devModeOnly`.** `resolveInputSchema` is optional; leave it out for a tool that takes no arguments. The schema fields are functions, not plain objects. Strapi calls them on each request and passes the caller's permissions (`context.userAbility`), so a tool can return a narrower schema for a less-privileged token. The `z` you build the schema with (Strapi's bundled copy of [Zod](https://github.com/colinhacks/zod)) has to come from `@strapi/utils`, not the `zod` package directly.
 
-Here is the smallest working tool, registered straight in `src/index.ts`:
+**Edit `src/index.ts`** and register the tool in the app's `register()` hook. Here is the smallest working version:
 
 ```ts
 // src/index.ts
@@ -298,7 +316,7 @@ npx @strapi/sdk-plugin@latest init .
 ✔ Use TypeScript? … yes
 ```
 
-Then wire it up in your main Strapi `config/plugins.ts`:
+Finally, **edit `config/plugins.ts`** to enable the plugin (merge with any existing entries):
 
 ```ts
 // config/plugins.ts
@@ -317,7 +335,7 @@ export default config;
 
 ## Step 6: Build the plugin's MCP tools
 
-The scaffold from Step 5 leaves a default plugin: `server/src/{register,bootstrap,destroy}.ts` and a `controllers/services/routes` tree. Delete those three folders, you won't need them, and put everything under a new `server/src/mcp/` folder. We build it bottom-up, each file using the one before it:
+The scaffold from Step 5 leaves a default plugin: `server/src/{register,bootstrap,destroy}.ts` plus `controllers/`, `services/`, `routes/`, `config/`, `content-types/`, `policies/`, and `middlewares/` stubs. **Leave those stubs in place** — the generated `server/src/index.ts` imports every one of them, so deleting any will break the build. You only *add* a new `server/src/mcp/` folder here (and replace `register.ts` in 6.9). We build it bottom-up, each file using the one before it:
 
 ```
 server/src/
@@ -337,7 +355,9 @@ server/src/
 
 We build two tools here. The [example repo](https://github.com/PaulBratslavsky/strapi-mcp-demo-and-tool-extension) adds two more (`get_content_api_docs` and `get_extended_mcp_info`); each is the same shape.
 
-**1. The tool contract — `server/src/mcp/types.ts`.** Every tool file exports an object of this one shape, so the loader can treat them all the same:
+**6.1 — Create `server/src/mcp/types.ts`**
+
+This is the one shape every tool file exports, so the loader can treat them all the same:
 
 ```ts
 // server/src/mcp/types.ts
@@ -350,7 +370,9 @@ export type StrapiMcpToolModule = {
 };
 ```
 
-**2. The permissions — `server/src/mcp/permissions.ts`.** One admin action per tool, registered under `section: 'plugins'` so each becomes its own checkbox on an admin token's **Plugins** tab. (The inline tool in Step 3 did this at the app level, under `section: 'settings'`; a plugin's actions group under the plugin name instead.) Export the UIDs so each tool gates on its own:
+**6.2 — Create `server/src/mcp/permissions.ts`**
+
+One admin action per tool, registered under `section: 'plugins'` so each becomes its own checkbox on an admin token's **Plugins** tab. (The inline tool in Step 3 did this at the app level, under `section: 'settings'`; a plugin's actions group under the plugin name instead.) Export the UIDs so each tool gates on its own:
 
 ```ts
 // server/src/mcp/permissions.ts
@@ -376,7 +398,9 @@ export const registerMcpPermissions = async (strapi: Core.Strapi) => {
 };
 ```
 
-**3. The tools — `server/src/mcp/tools/`.** Each implements `StrapiMcpToolModule` and gates on an action from `permissions.ts`. A read tool that takes an optional `limit`:
+**6.3 — Create `server/src/mcp/tools/list-recent-articles.ts`**
+
+The first tool. Each tool implements `StrapiMcpToolModule` and gates on an action from `permissions.ts`. This one is a read tool that takes an optional `limit`:
 
 ```ts
 // server/src/mcp/tools/list-recent-articles.ts
@@ -460,7 +484,9 @@ import guide from './guides/article-authoring-guide.md?raw';
 // `guide` is the file's full text, as a string
 ```
 
-TypeScript doesn't know what a `?raw` import resolves to, so declare it once: any `*.md?raw` import is a string.
+**6.4 — Create `server/src/md-raw.d.ts`**
+
+TypeScript doesn't know what a `?raw` import resolves to, so declare it once — any `*.md?raw` import is a string:
 
 ```ts
 // server/src/md-raw.d.ts
@@ -470,7 +496,9 @@ declare module '*.md?raw' {
 }
 ```
 
-The guide itself, `server/src/mcp/guides/article-authoring-guide.md`:
+**6.5 — Create `server/src/mcp/guides/article-authoring-guide.md`**
+
+This is the guide content itself — plain markdown you can edit:
 
 ````md
 # Article authoring guide
@@ -504,16 +532,20 @@ in the admin later.
 
 ## What to send to `create_article`
 
+The built-in `create_article` tool wraps the entry in a top-level `data` object (its arguments are `{ data, locale? }`), so nest the fields under `data`:
+
 ```json
 {
-  "title": "React Server Components, Explained",
-  "description": "What RSC change, and when to still reach for client components.",
-  "blocks": [
-    {
-      "__component": "shared.rich-text",
-      "body": "**TL;DR**\n\n- RSC run on the server and cut client-side JavaScript.\n\n## What are they?\n\n..."
-    }
-  ]
+  "data": {
+    "title": "React Server Components, Explained",
+    "description": "What RSC change, and when to still reach for client components.",
+    "blocks": [
+      {
+        "__component": "shared.rich-text",
+        "body": "**TL;DR**\n\n- RSC run on the server and cut client-side JavaScript.\n\n## What are they?\n\n..."
+      }
+    ]
+  }
 }
 ```
 
@@ -530,7 +562,9 @@ Keep `description` under 80 characters, and leave `slug` unset (Strapi derives i
 from `title`).
 ````
 
-The tool imports it with `?raw` and returns it, gated on `guide.read`:
+**6.6 — Create `server/src/mcp/tools/get-article-authoring-guide.ts`**
+
+The second tool imports that markdown with `?raw` and returns it, gated on `guide.read`:
 
 ```ts
 // server/src/mcp/tools/get-article-authoring-guide.ts
@@ -566,7 +600,9 @@ const tool: StrapiMcpToolModule = {
 export default tool;
 ```
 
-**4. The tool list — `server/src/mcp/tools/index.ts`.** A barrel collecting them into one array:
+**6.7 — Create `server/src/mcp/tools/index.ts`**
+
+A barrel that collects both tools into one array:
 
 ```ts
 // server/src/mcp/tools/index.ts
@@ -577,7 +613,9 @@ import getArticleAuthoringGuide from './get-article-authoring-guide';
 export const tools: StrapiMcpToolModule[] = [listRecentArticles, getArticleAuthoringGuide];
 ```
 
-**5. The loader — `server/src/mcp/index.ts`.** Loops the list and registers each tool with `strapi.ai.mcp`:
+**6.8 — Create `server/src/mcp/index.ts`**
+
+The loader loops the list and registers each tool with `strapi.ai.mcp`:
 
 ```ts
 // server/src/mcp/index.ts
@@ -595,7 +633,9 @@ export const registerMcpTools = (strapi: Core.Strapi) => {
 };
 ```
 
-**6. Wire it on boot — `server/src/register.ts`.** Register the permissions first (so the actions exist before a tool's `auth.policies` references them), then the tools:
+**6.9 — Replace `server/src/register.ts`**
+
+The scaffold already created this file; replace its contents. Register the permissions first (so the actions exist before a tool's `auth.policies` references them), then the tools:
 
 ```ts
 // server/src/register.ts
@@ -608,7 +648,9 @@ export default async ({ strapi }) => {
 };
 ```
 
-**7. Build, restart, and grant.** From inside the plugin folder:
+**6.10 — Build, restart, and grant**
+
+From inside the plugin folder, build the plugin:
 
 ```bash
 npm run build

@@ -29,16 +29,20 @@ in the admin later.
 
 ## What to send to `create_article`
 
+The built-in `create_article` tool wraps the entry in a top-level `data` object (its arguments are `{ data, locale? }`), so nest the fields under `data`:
+
 ```json
 {
-  "title": "React Server Components, Explained",
-  "description": "What RSC change, and when to still reach for client components.",
-  "blocks": [
-    {
-      "__component": "shared.rich-text",
-      "body": "**TL;DR**\n\n- RSC run on the server and cut client-side JavaScript.\n\n## What are they?\n\n..."
-    }
-  ]
+  "data": {
+    "title": "React Server Components, Explained",
+    "description": "What RSC change, and when to still reach for client components.",
+    "blocks": [
+      {
+        "__component": "shared.rich-text",
+        "body": "**TL;DR**\n\n- RSC run on the server and cut client-side JavaScript.\n\n## What are they?\n\n..."
+      }
+    ]
+  }
 }
 ```
 
