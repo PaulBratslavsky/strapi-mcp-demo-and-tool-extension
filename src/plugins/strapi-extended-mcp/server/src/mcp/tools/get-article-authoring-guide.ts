@@ -1,6 +1,6 @@
 import { z } from "@strapi/utils";
 import type { StrapiMcpToolModule } from "../types";
-import { ARTICLE_AUTHORING_GUIDE_MD } from "../guides/article-authoring-guide";
+import ARTICLE_AUTHORING_GUIDE_MD from "../guides/article-authoring-guide.md?raw";
 import { MCP_ACTIONS } from "../permissions";
 
 const tool: StrapiMcpToolModule = {

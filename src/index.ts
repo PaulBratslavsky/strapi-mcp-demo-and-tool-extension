@@ -1,11 +1,46 @@
 import type { Core } from '@strapi/strapi';
+import { z } from '@strapi/utils';
 
 const ROLE_UID = 'plugin::api-permissions.role';
 const PERMISSION_UID = 'plugin::api-permissions.permission';
 const PUBLIC_READ_ACTIONS = ['find', 'findOne'] as const;
 
 export default {
-  register() {},
+  async register({ strapi }: { strapi: Core.Strapi }) {
+    if (!strapi.ai.mcp.isEnabled()) return;
+
+    // App-level admin permission so the stats tool is grantable per token.
+    // An app isn't a plugin, so it goes under section: 'settings'; the action
+    // id comes out as api::stats-overview.read.
+    await strapi.service('admin::permission').actionProvider.registerMany([
+      {
+        section: 'settings',
+        category: 'MCP',
+        displayName: 'Read content stats overview',
+        uid: 'stats-overview.read',
+      },
+    ]);
+
+    strapi.ai.mcp.registerTool({
+      name: 'get_stats_overview',
+      title: 'Get content stats overview',
+      description: 'Return aggregate counts of published articles, authors, and categories.',
+      resolveOutputSchema: () =>
+        z.object({
+          articles: z.number().int().nonnegative(),
+          authors: z.number().int().nonnegative(),
+          categories: z.number().int().nonnegative(),
+        }),
+      auth: { policies: [{ action: 'api::stats-overview.read' }] },
+      createHandler: (strapi) => async () => {
+        const overview = await strapi.service('api::stats.stats').overview();
+        return {
+          content: [{ type: 'text', text: JSON.stringify(overview) }],
+          structuredContent: overview,
+        };
+      },
+    });
+  },
 
   async bootstrap({ strapi }: { strapi: Core.Strapi }) {
     if (!strapi.plugin('api-permissions')) return;
