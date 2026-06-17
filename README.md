@@ -2,7 +2,7 @@
 
 A [Strapi 5](https://strapi.io) backend preloaded with blog content types and seed data, plus three things that go beyond a stock Strapi install:
 
-- **A custom MCP server plugin** (`strapi-mcp`) that exposes the content API as [Model Context Protocol](https://modelcontextprotocol.io) tools, so an AI assistant can list, draft, and publish articles.
+- **The built-in MCP server, extended two ways** — one custom tool registered **inline** in `src/index.ts`, plus a **`strapi-extended-mcp` plugin** that adds several more — so an AI assistant (Claude, Cursor, Windsurf) can work against this instance over [Model Context Protocol](https://modelcontextprotocol.io). This is the subject of the [companion blog post](./BLOG-strapi-mcp-custom-tools.md).
 - **Better Auth** wired in via the Strapi-community plugins, replacing the default users-permissions auth.
 - **A custom `/api/stats` endpoint** that returns an overview of the content in the instance.
 
@@ -54,9 +54,20 @@ Runs `scripts/seed.js` to populate articles, authors, and categories (with place
 | `npm run upgrade` | Upgrade to the latest Strapi version |
 | `npm run deploy` | Deploy to [Strapi Cloud](https://cloud.strapi.io) |
 
-## The `strapi-mcp` plugin
+## MCP server and custom tools
 
-A local plugin at `src/plugins/strapi-mcp` that surfaces the content API as MCP tools — listing, creating drafts, publishing, and managing articles, authors, and categories — so an AI client (such as Claude) can author content directly against this instance. Articles created through the plugin follow a fixed blog template (TL;DR, body, citations) enforced by its authoring guide.
+Strapi 5.47+ ships an MCP server **built in**. It's enabled here in `config/server.ts` (`mcp: { enabled: true }`) and served at `/mcp`; out of the box it auto-derives CRUD tools for every content type (list/get/create/update/publish…). This project then **extends** it with custom tools in the two ways walked through in the [companion blog post](./BLOG-strapi-mcp-custom-tools.md):
+
+**1. Inline, at the app level — `src/index.ts`.** The app's `register()` hook registers one custom tool, `get_stats_overview` (it wraps the `/api/stats` service), gated on an **app-level** admin permission (`api::stats-overview.read`, granted on an Admin Token's **Settings** tab). This is the quickest way when you only have a tool or two.
+
+**2. As a plugin — `src/plugins/strapi-extended-mcp`.** A local server plugin that registers four more tools, each gated on its **own** plugin permission (`plugin::strapi-extended-mcp.*`, granted on the **Plugins** tab):
+
+- `list_recent_articles` — recent published articles with author/category.
+- `get_article_authoring_guide` — the house format an AI follows before writing (TL;DR, body, citations); the model then saves with the **built-in** `create_article`.
+- `get_content_api_docs` — a short Content API reference.
+- `get_extended_mcp_info` — plugin metadata.
+
+Notes: the MCP server uses **Admin API Tokens** (not Content API tokens), and a token only sees the tools its permissions grant. The plugin loads from its `dist/`, so run `npm run build` in `src/plugins/strapi-extended-mcp` after changing its source, then restart Strapi.
 
 ## Authentication
 
@@ -96,4 +107,3 @@ npm run deploy
 ---
 
 <sub>🤫 Psst! [Strapi is hiring](https://strapi.io/careers).</sub>
-# strapi-mcp-demo-and-tool-extension
