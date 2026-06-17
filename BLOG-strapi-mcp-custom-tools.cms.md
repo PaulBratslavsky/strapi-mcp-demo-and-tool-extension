@@ -136,15 +136,20 @@ Start a new Claude Code session and run `/mcp`. It should show `strapi-mcp ✓ C
 {
   "mcpServers": {
     "strapi-mcp": {
-      "command": "npx",
+      "command": "/absolute/path/to/npx",
       "args": [
         "-y", "mcp-remote", "http://localhost:1337/mcp",
         "--header", "Authorization: Bearer YOUR_ADMIN_TOKEN"
-      ]
+      ],
+      "env": {
+        "PATH": "/absolute/path/to/node/bin:/usr/local/bin:/usr/bin:/bin"
+      }
     }
   }
 }
 ```
+
+> **Heads-up — Claude Desktop needs absolute paths.** Desktop launches MCP commands with a **minimal environment**, not your shell's, so a bare `npx` is often not on its `PATH` — especially with a Node version manager (nvm, fnm, Volta), where `node`/`npx` live under a versioned directory. If the connector won't start, set `command` to the **absolute path** to `npx` (find yours with `which npx`) and add an `env.PATH` that includes your Node `bin` directory. With nvm, for example, `command` looks like `/Users/you/.nvm/versions/node/v22.18.0/bin/npx`, and `PATH` begins with that same `…/bin` directory (the two `/absolute/path/to/...` placeholders above). On a system Node install a bare `"npx"` may just work — try it first.
 
 Cursor and Windsurf have their own config formats; the [AI client configuration](https://docs.strapi.io/cms/features/strapi-mcp-server#ai-client-configuration) docs cover all four.
 
